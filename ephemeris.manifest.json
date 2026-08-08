@@ -18,6 +18,12 @@
       "label": "Chiron, Lilith, asteroids"
     }
   },
+  "measuredCoverage": {
+    "minJdUt": -3026613,
+    "maxJdUt": 7857125,
+    "minDate": "-12999-04-25",
+    "maxDate": "16799-12-23"
+  },
   "profiles": {
     "core": {
       "description": "1800-2399 CE. Covers every realistic natal chart. Fast local-dev option.",
@@ -28,7 +34,7 @@
       ]
     },
     "full": {
-      "description": "13200 BCE - 16799 CE. Maximum freely available coverage. Default.",
+      "description": "Maximum freely available coverage. Default. See measuredCoverage for the real bounds — the filename-derived range overstates the lower end by about two centuries.",
       "files": [
         "seasm132.se1",
         "seasm126.se1",

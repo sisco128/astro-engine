@@ -81,9 +81,24 @@ function assertCalcOk(
   context: Readonly<Record<string, unknown>>,
 ): void {
   if (flag < 0) {
+    const message = serr.trim();
+
+    // Running off the end of the installed data is a client-fixable 400, not
+    // a server fault. Swiss Ephemeris reports it in two quite different
+    // wordings, and both arrive with the same flag -1 as a genuine
+    // calculation failure:
+    //
+    //   past the ceiling: "SwissEph file 'sepl_168.se1' not found in PATH ..."
+    //   below the floor:  "asteroid eph. file (seplm132.se1): jd -3031604.70
+    //                      < lower limit -3026605.47;"
+    //
+    // Note the leading minus in the second: a pattern anchored on `jd \d`
+    // matches the first form and silently misses the second.
+    const outOfRange = /not found in PATH|lower limit|upper limit|out of range/i.test(message);
+
     throw new EphemerisError(
-      'EPHEMERIS_CALC_FAILED',
-      serr.trim() === '' ? 'Swiss Ephemeris returned a failure flag' : serr.trim(),
+      outOfRange ? 'UNSUPPORTED_DATE_RANGE' : 'EPHEMERIS_CALC_FAILED',
+      message === '' ? 'Swiss Ephemeris returned a failure flag' : message,
       context,
     );
   }
