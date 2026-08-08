@@ -116,6 +116,20 @@ export default tseslint.config(
       // Scripts are CLIs; stdout is their interface.
       'no-console': 'off',
       'no-restricted-properties': 'off',
+
+      // Measurement scripts deliberately reimplement the small amount of
+      // angular maths they need instead of importing src/math/angle.ts.
+      // Coupling a measurement to the code it exists to validate would let a
+      // bug in wrap360 hide inside the numbers that are supposed to catch it.
+      'no-restricted-syntax': 'off',
+
+      // The simulation sweeps are genuinely nested loops — body, story,
+      // member, aspect, day. Flattening them into helpers would obscure what
+      // is being iterated, and these files are read as experiments rather
+      // than maintained as engine code.
+      complexity: 'off',
+      'max-depth': 'off',
+      '@typescript-eslint/no-unnecessary-condition': 'off',
     },
   },
 

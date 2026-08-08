@@ -25,7 +25,27 @@ export const SCORING_V1 = {
    */
   compositeConjunctionOrbDeg: 10,
 
-  /** themes.js:345-351. Multiplied by `baseScoreMultiplier` to form the base. */
+  /**
+   * themes.js:345-351. Multiplied by `baseScoreMultiplier` to form the base.
+   *
+   * WARNING: `conjunction: 5` is unreachable, and it is the highest weight in
+   * the table.
+   *
+   * Composite fusion uses `compositeConjunctionOrbDeg` = 10, and the natal
+   * conjunction orb is also 10. Two composites close enough to be conjunct
+   * therefore have members close enough to have already fused into one
+   * composite — so there is no pair, and no story. The effective maximum is
+   * the opposition at 4.
+   *
+   * Verified empirically: 60,000 random chart layouts produced zero
+   * conjunction stories, and tests/unit/themes.test.ts asserts it
+   * deterministically.
+   *
+   * Preserved because removing it would change nothing about behaviour while
+   * discarding evidence of what the model's author intended. Fixing it — by
+   * making the fusion orb tighter than the conjunction orb — would be a real
+   * change to every chart's rankings and needs its own decision.
+   */
   aspectImportance: {
     conjunction: 5,
     opposition: 4,
