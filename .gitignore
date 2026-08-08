@@ -1,0 +1,21 @@
+node_modules/
+dist/
+coverage/
+reports/
+
+.env
+.env.*
+!.env.example
+
+.DS_Store
+*.log
+
+# Ephemeris data is fetched, never committed.
+#
+# The prototype carried 301 MB of .se1 files un-ignored for 20 months, and
+# sisco128/meteorite has ~117 MB of them permanently in its git history. A
+# passive line here demonstrably is not enough, so .github/workflows/ci.yml
+# also fails any diff that adds a *.se1 or any blob over 5 MB.
+#
+# To populate: pnpm ephem:fetch
+/ephem/
