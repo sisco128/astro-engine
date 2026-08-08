@@ -125,6 +125,9 @@ export default tseslint.config(
       'no-console': 'off',
       'no-restricted-properties': 'off',
       '@typescript-eslint/no-unsafe-assignment': 'off',
+      // expect.extend's custom matchers are declared via module augmentation,
+      // which the type-aware rules cannot follow into a setup file.
+      '@typescript-eslint/no-unsafe-call': 'off',
     },
   },
 

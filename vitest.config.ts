@@ -12,5 +12,6 @@ export default defineConfig({
     // Ephemeris work is CPU-bound and synchronous; parallel files only
     // multiply memory for no gain.
     fileParallelism: false,
+    setupFiles: ['tests/golden/matchers.ts'],
   },
 });
