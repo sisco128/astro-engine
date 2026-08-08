@@ -20,7 +20,8 @@
 
 import { aspectBetween, type AspectPoint } from './aspects.js';
 import { identifyComposites, type CompositeBody } from './composites.js';
-import { ORB_POLICIES, type AspectId, type OrbPolicyId } from './orb-policy.js';
+import { orbPolicy, type AspectId, type OrbPolicy, type OrbPolicyId } from './orb-policy.js';
+import { scoreStoryV2, type ScoreV2 } from './scoring-v2.js';
 import {
   relationalBonus,
   SCORING_V1,
@@ -41,6 +42,14 @@ export interface Story {
    */
   readonly members: readonly string[];
   readonly score: number;
+  /**
+   * `score` as a fraction of the theoretical maximum, in [0, 1]. Comparable
+   * across stories AND across charts, which the raw v1 number never was.
+   * Absent under v1, where no such maximum exists.
+   */
+  readonly strength?: number;
+  /** Each factor separately, so a client can show WHY a story ranks where it does. */
+  readonly factors?: ScoreV2['factors'];
   /** Which weighting produced `score`, so a client can detect a change. */
   readonly scoringVersion: string;
 }
@@ -123,25 +132,103 @@ export interface StoriesResult {
   readonly stories: readonly Story[];
 }
 
+export type ScoringVersion = 'v1' | 'v2';
+
 export interface StoriesOptions {
   /** Which orbs define a story-forming aspect. Defaults to the prototype's natal set. */
   readonly orbPolicy?: OrbPolicyId;
   readonly weights?: ScoringWeights;
+  /**
+   * v2 by default: four multiplicative factors on a common scale, comparable
+   * across charts. v1 reproduces themes.js exactly, for comparing against
+   * results produced before the rewrite.
+   */
+  readonly scoring?: ScoringVersion;
+}
+
+/** Strongest category pair across two composites — the max, as v1 took it. */
+function bestRelation(
+  a: CompositeBody,
+  b: CompositeBody,
+  weights: ScoringWeights,
+): [PlanetCategory | undefined, PlanetCategory | undefined] {
+  let best: [PlanetCategory | undefined, PlanetCategory | undefined] = [undefined, undefined];
+  let bestValue = -1;
+
+  for (const memberA of a.members) {
+    for (const memberB of b.members) {
+      const categoryA = categoryOf(memberA, weights);
+      const categoryB = categoryOf(memberB, weights);
+      const value = relationalBonus(categoryA, categoryB, weights);
+      if (value > bestValue) {
+        bestValue = value;
+        best = [categoryA, categoryB];
+      }
+    }
+  }
+
+  return best;
+}
+
+function hasLuminary(body: CompositeBody, weights: ScoringWeights): boolean {
+  return body.members.some((member) => (weights.luminaries as readonly string[]).includes(member));
+}
+
+/** The scoring half of a story, under whichever version was asked for. */
+function scored(input: {
+  version: ScoringVersion;
+  aspect: AspectId;
+  orb: number;
+  a: CompositeBody;
+  b: CompositeBody;
+  weights: ScoringWeights;
+  policy: OrbPolicy;
+}): Pick<Story, 'score' | 'strength' | 'factors' | 'scoringVersion'> {
+  const { version, aspect, orb, a, b, weights, policy } = input;
+
+  if (version === 'v1') {
+    return {
+      score: scoreStory({ aspect, orb, a, b, weights }),
+      scoringVersion: 'v1',
+    };
+  }
+
+  const result = scoreStoryV2({
+    aspect,
+    orb,
+    maxOrb: policy[aspect] ?? 10,
+    relation: bestRelation(a, b, weights),
+    groupA: { members: a.members.length, hasLuminary: hasLuminary(a, weights) },
+    groupB: { members: b.members.length, hasLuminary: hasLuminary(b, weights) },
+  });
+
+  return {
+    score: result.score,
+    strength: result.strength,
+    factors: result.factors,
+    scoringVersion: 'v2',
+  };
+}
+
+/**
+ * Ascendant and Midheaven are geometrically bound and always in aspect, so a
+ * "story" between them alone is an artefact of the coordinate system rather
+ * than a feature of the chart. themes.js:315 excluded the same pair.
+ */
+function isAnglePairOnly(members: readonly string[]): boolean {
+  return members.length === 2 && members.includes('ascendant') && members.includes('midheaven');
 }
 
 /**
  * Composite bodies, then the stories between them.
- *
- * Ascendant and Midheaven are excluded as a pair: they are geometrically bound
- * and always in aspect, so the "story" would be an artefact of the coordinate
- * system. The prototype hardcoded the same exclusion at themes.js:315.
  */
 export function identifyStories(
   points: readonly AspectPoint[],
   options: StoriesOptions = {},
 ): StoriesResult {
   const weights = options.weights ?? SCORING_V1;
-  const policy = ORB_POLICIES[options.orbPolicy ?? 'natal.v1'];
+  const policy = orbPolicy(options.orbPolicy ?? 'natal.v1');
+  const version = options.scoring ?? 'v2';
 
   const composites = identifyComposites(
     points.map((point) => ({ id: point.id, lon: point.lon })),
@@ -157,9 +244,7 @@ export function identifyStories(
       if (a === undefined || b === undefined) continue;
 
       const members = [...a.members, ...b.members];
-      if (members.length === 2 && members.includes('ascendant') && members.includes('midheaven')) {
-        continue;
-      }
+      if (isAnglePairOnly(members)) continue;
 
       const aspect = aspectBetween(
         { id: a.members.join('+'), lon: a.lon },
@@ -175,8 +260,7 @@ export function identifyStories(
         aspect: aspect.aspect,
         orb: aspect.orb,
         members,
-        score: scoreStory({ aspect: aspect.aspect, orb: aspect.orb, a, b, weights }),
-        scoringVersion: weights.version,
+        ...scored({ version, aspect: aspect.aspect, orb: aspect.orb, a, b, weights, policy }),
       });
     }
   }

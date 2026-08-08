@@ -104,7 +104,7 @@ export const ORB_POLICIES = {
     trine: 1,
     square: 1,
   },
-} as const satisfies Record<string, OrbPolicy>;
+} satisfies Record<string, OrbPolicy>;
 
 export type OrbPolicyId = keyof typeof ORB_POLICIES;
 

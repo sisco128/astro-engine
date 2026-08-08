@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import type { AspectPoint } from '../../src/domain/aspects.js';
 import { ORB_POLICIES } from '../../src/domain/orb-policy.js';
 import { SCORING_V1 } from '../../src/domain/scoring-weights.js';
+import { EDGE_WEIGHT, orbFalloff } from '../../src/domain/scoring-v2.js';
 import { identifyStories } from '../../src/domain/themes.js';
 
 function at(id: string, lon: number): AspectPoint {
@@ -75,7 +76,9 @@ describe('story identification', () => {
   });
 });
 
-describe('scoring, ported verbatim', () => {
+describe('scoring v1, ported verbatim', () => {
+  const V1 = { scoring: 'v1' } as const;
+
   /** base = importance * 100; falloff = (1 - orbMin/600)^2; score = (base + bonus) * falloff * mult */
   function expected(importance: number, orbDeg: number, bonus: number, mult = 1): number {
     const falloff = Math.pow(1 - (orbDeg * 60) / 600, 2);
@@ -85,23 +88,26 @@ describe('scoring, ported verbatim', () => {
   it('scores an exact opposition at full weight', () => {
     // Opposition, not conjunction — see the unreachability test below.
     // Sun and Jupiter: personal + social = bonus 3.
-    const { stories } = identifyStories([at('sun', 0), at('jupiter', 180)]);
+    const { stories } = identifyStories([at('sun', 0), at('jupiter', 180)], V1);
     expect(stories[0]?.score).toBeCloseTo(expected(4, 0, 3), 9);
   });
 
   it('applies the squared falloff', () => {
-    const { stories } = identifyStories([at('sun', 0), at('jupiter', 182)]);
+    const { stories } = identifyStories([at('sun', 0), at('jupiter', 182)], V1);
     expect(stories[0]?.score).toBeCloseTo(expected(4, 2, 3), 9);
   });
 
   it('takes the strongest relational pairing, not an average', () => {
     // themes.js:237-250 kept the MAXIMUM bonus across category pairs, so one
     // personal-generational pairing inside a group carries the whole story.
-    const { stories } = identifyStories([
-      at('sun', 0),
-      at('mercury', 3), // both personal
-      at('neptune', 121), // generational -> personal+generational = 5
-    ]);
+    const { stories } = identifyStories(
+      [
+        at('sun', 0),
+        at('mercury', 3), // both personal
+        at('neptune', 121), // generational -> personal+generational = 5
+      ],
+      V1,
+    );
 
     const story = stories[0];
     expect(story).toBeDefined();
@@ -110,7 +116,7 @@ describe('scoring, ported verbatim', () => {
   });
 
   it('multiplies for a stellium, and again when a luminary is present', () => {
-    const { composites } = identifyStories([at('sun', 0), at('mercury', 4), at('venus', 8)]);
+    const { composites } = identifyStories([at('sun', 0), at('mercury', 4), at('venus', 8)], V1);
     const stellium = composites.find((c) => c.type === 'stellium');
 
     expect(stellium).toBeDefined();
@@ -121,8 +127,9 @@ describe('scoring, ported verbatim', () => {
   });
 
   it('stamps the scoring version so a client can detect a change', () => {
-    const { stories } = identifyStories([at('sun', 0), at('jupiter', 180)]);
+    const { stories } = identifyStories([at('sun', 0), at('jupiter', 180)], V1);
     expect(stories[0]?.scoringVersion).toBe('v1');
+    expect(stories[0]?.strength).toBeUndefined();
   });
 });
 
@@ -150,8 +157,9 @@ describe('the two constants that look like accidents', () => {
     // Every other factor in the model multiplies. On a base of 200-500 the
     // largest bonus (5) moves the result by ~1%. Same geometry both times, so
     // the only difference is the bonus: 5 against 1.
-    const maxBonus = identifyStories([at('sun', 0), at('neptune', 180)]).stories[0];
-    const minBonus = identifyStories([at('venus', 0), at('mars', 180)]).stories[0];
+    const V1 = { scoring: 'v1' } as const;
+    const maxBonus = identifyStories([at('sun', 0), at('neptune', 180)], V1).stories[0];
+    const minBonus = identifyStories([at('venus', 0), at('mars', 180)], V1).stories[0];
 
     expect(maxBonus).toBeDefined();
     expect(minBonus).toBeDefined();
@@ -185,5 +193,65 @@ describe('the two constants that look like accidents', () => {
       ]);
       expect(stories.every((story) => story.aspect !== 'conjunction')).toBe(true);
     }
+  });
+});
+
+describe('scoring v2, the default', () => {
+  it('is what you get without asking', () => {
+    const { stories } = identifyStories([at('sun', 0), at('jupiter', 180)]);
+    expect(stories[0]?.scoringVersion).toBe('v2');
+  });
+
+  it('reports strength in [0, 1], comparable across charts', () => {
+    // v1's raw number meant nothing on its own: it ranged 21 to 375 on the
+    // reference chart and depended on how many stelliums happened to exist.
+    const { stories } = identifyStories([at('sun', 0), at('jupiter', 180)]);
+    const strength = stories[0]?.strength;
+
+    expect(strength).toBeDefined();
+    expect(strength).toBeGreaterThan(0);
+    expect(strength).toBeLessThanOrEqual(1);
+  });
+
+  it('exposes every factor, so a ranking can be explained', () => {
+    const { stories } = identifyStories([at('sun', 0), at('jupiter', 180)]);
+    const factors = stories[0]?.factors;
+
+    expect(factors).toBeDefined();
+    expect(factors?.aspect).toBeCloseTo(1 / Math.sqrt(2), 9); // opposition, harmonic 2
+    expect(factors?.orb).toBeCloseTo(1, 9); // exact
+    expect(factors?.relation).toBeCloseTo(1.25, 9); // personal + social, rank 3 of 5
+    expect(factors?.group).toBe(1);
+  });
+
+  it('normalises the falloff by each aspect own orb', () => {
+    // v1 divided everything by a flat 600 arcminutes, so a square at its own
+    // 6-degree limit still scored 0.16 while a conjunction at 10 scored 0.
+    // Here both land on EDGE_WEIGHT.
+    const squareAtLimit = orbFalloff(6, 6);
+    const trineAtLimit = orbFalloff(7, 7);
+    const oppositionAtLimit = orbFalloff(8, 8);
+
+    expect(squareAtLimit).toBeCloseTo(EDGE_WEIGHT, 9);
+    expect(trineAtLimit).toBeCloseTo(EDGE_WEIGHT, 9);
+    expect(oppositionAtLimit).toBeCloseTo(EDGE_WEIGHT, 9);
+  });
+
+  it('keeps the decay steep on purpose', () => {
+    // Deliberate: the steep curve is what lets one or two stories stand out.
+    // A gentle one flattens every story into the same band. Changing this
+    // changes which stories a chart is said to be about.
+    expect(EDGE_WEIGHT).toBe(0.06);
+    expect(orbFalloff(0, 8) / orbFalloff(8, 8)).toBeCloseTo(1 / EDGE_WEIGHT, 6);
+  });
+
+  it('makes the relational weight actually matter, unlike v1', () => {
+    // v1 added 1..5 to a base of 200-500: about one percent. v2 multiplies.
+    const strong = identifyStories([at('sun', 0), at('neptune', 180)]).stories[0];
+    const weak = identifyStories([at('venus', 0), at('mars', 180)]).stories[0];
+
+    expect(strong?.score).toBeDefined();
+    // personal+generational (1.5) against personal+personal (1.0)
+    expect((strong?.score ?? 0) / (weak?.score ?? 1)).toBeCloseTo(1.5, 6);
   });
 });
