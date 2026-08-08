@@ -296,6 +296,24 @@ export function jdFromUtc(utc: UtcInstant): JulianDayUT {
   return result.data[1] as JulianDayUT;
 }
 
+/**
+ * True obliquity of the ecliptic in degrees — mean obliquity plus the
+ * nutation in obliquity.
+ *
+ * The distinction is not academic: at the 1987 epoch nutation contributes
+ * about 9 arcseconds, and using the mean value instead moves a computed
+ * Ascendant by roughly 0.6 arcseconds — sixty times the tolerance the golden
+ * suite holds the angles to.
+ *
+ * SE_ECL_NUT is body -1, deliberately outside the BodyId catalogue: it is not
+ * a body and must not be requestable as one.
+ */
+export function trueObliquity(jd: JulianDayUT): number {
+  const result = sweph.calc_ut(jd, C.SE_ECL_NUT, 0);
+  assertCalcOk(result.flag, result.error, { quantity: 'obliquity', jdUt: jd });
+  return result.data[0];
+}
+
 /** The Swiss Ephemeris C library version actually loaded. Asserted in CI. */
 export function seVersion(): string {
   return sweph.version();
