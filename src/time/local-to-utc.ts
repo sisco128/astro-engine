@@ -46,7 +46,7 @@ export interface LocalDateTime {
   readonly day: number;
   readonly hour: number;
   readonly minute: number;
-  readonly second?: number;
+  readonly second?: number | undefined;
   /** IANA zone identifier, e.g. "Europe/Rome". */
   readonly zone: string;
 }

@@ -15,6 +15,8 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { env } from '../config/env.js';
 import { EphemerisError } from '../ephemeris/errors.js';
 import { initEphemeris, report } from '../ephemeris/init.js';
+import { LocalTimeError } from '../time/local-to-utc.js';
+import { registerChartRoutes } from './routes/v1/charts.js';
 
 /** HTTP status for each error code. Frozen at /v1. */
 const STATUS_BY_CODE: Readonly<Record<string, number>> = {
@@ -24,6 +26,12 @@ const STATUS_BY_CODE: Readonly<Record<string, number>> = {
   EPHEMERIS_UNAVAILABLE: 503,
   EPHEMERIS_FALLBACK: 500,
   EPHEMERIS_CALC_FAILED: 500,
+  HOUSE_SYSTEM_UNDEFINED_AT_LATITUDE: 422,
+  // 409, not 400: the request is well-formed, but that wall-clock time is
+  // genuinely unresolvable without a decision only the caller can make.
+  NONEXISTENT_LOCAL_TIME: 409,
+  AMBIGUOUS_LOCAL_TIME: 409,
+  INVALID_TIME_ZONE: 400,
 };
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -55,7 +63,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   app.setErrorHandler((error, request, reply) => {
-    if (error instanceof EphemerisError) {
+    if (error instanceof EphemerisError || error instanceof LocalTimeError) {
       const status = STATUS_BY_CODE[error.code] ?? 500;
       request.log.warn({ code: error.code, details: error.details }, error.message);
       return reply.status(status).send({
@@ -131,6 +139,8 @@ export async function buildApp(): Promise<FastifyInstance> {
       },
     ],
   }));
+
+  registerChartRoutes(app);
 
   initEphemeris();
 

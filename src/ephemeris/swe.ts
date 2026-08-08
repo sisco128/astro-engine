@@ -267,7 +267,7 @@ export interface UtcInstant {
   readonly day: number;
   readonly hour: number;
   readonly minute: number;
-  readonly second?: number;
+  readonly second?: number | undefined;
 }
 
 /** Julian Day (UT) from a UTC calendar instant. Leap-second aware via swe_utc_to_jd. */
