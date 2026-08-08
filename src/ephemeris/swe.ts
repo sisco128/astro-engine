@@ -168,6 +168,99 @@ export function lonSpeedAt(jd: JulianDayUT, body: BodyId): number {
   return result.data[3];
 }
 
+/**
+ * House systems, by their Swiss Ephemeris letter.
+ *
+ * The prototype supported exactly one, as the literal `'P'` at
+ * calculations.js:101, with no parameter and no way to ask for anything else.
+ */
+export const HOUSE_SYSTEMS = {
+  P: 'Placidus',
+  K: 'Koch',
+  O: 'Porphyry',
+  R: 'Regiomontanus',
+  C: 'Campanus',
+  E: 'Equal (from Ascendant)',
+  W: 'Whole Sign',
+  B: 'Alcabitius',
+  M: 'Morinus',
+  T: 'Topocentric',
+} as const;
+
+export type HouseSystem = keyof typeof HOUSE_SYSTEMS;
+
+/**
+ * House systems that stay defined at every latitude. Offered as alternatives
+ * when a quadrant system breaks down near the poles.
+ */
+export const LATITUDE_SAFE_SYSTEMS: readonly HouseSystem[] = ['W', 'O', 'E', 'M'];
+
+export interface HouseSet {
+  readonly system: HouseSystem;
+  /** Cusps 1..12, in order. Index 0 is the first house. */
+  readonly cusps: readonly Longitude[];
+  readonly ascendant: Longitude;
+  readonly midheaven: Longitude;
+  /** Right ascension of the midheaven. */
+  readonly armc: Longitude;
+  readonly vertex: Longitude;
+  readonly equatorialAscendant: Longitude;
+}
+
+/**
+ * House cusps for an instant and a place.
+ *
+ * Measured behaviour that shapes this function: above roughly 66 degrees of
+ * latitude the quadrant systems are undefined, and Swiss Ephemeris does not
+ * refuse — it returns **flag -1 together with usable data**, silently
+ * substituted from Porphyry. At latitude 69.65 the Placidus and Koch cusps
+ * come back byte-identical to Porphyry's.
+ *
+ * The prototype never read that flag (calculations.js:101 hardcoded 'P' and
+ * destructured a non-existent error argument), so it presented Porphyry cusps
+ * labelled Placidus. Here the substitution is an error the caller must handle,
+ * because a chart that says Placidus and is not Placidus is worse than no
+ * chart.
+ */
+export function housesFor(
+  jd: JulianDayUT,
+  latitude: number,
+  longitude: number,
+  system: HouseSystem,
+): HouseSet {
+  const result = sweph.houses(jd, latitude, longitude, system);
+
+  if (result.flag < 0) {
+    throw new EphemerisError(
+      'HOUSE_SYSTEM_UNDEFINED_AT_LATITUDE',
+      `The ${HOUSE_SYSTEMS[system]} house system is undefined at latitude ${latitude.toFixed(4)}. ` +
+        `Swiss Ephemeris substituted Porphyry; refusing to return those cusps under the requested name.`,
+      {
+        system,
+        latitude,
+        suggestedSystems: LATITUDE_SAFE_SYSTEMS.map((letter) => ({
+          system: letter,
+          name: HOUSE_SYSTEMS[letter],
+        })),
+      },
+    );
+  }
+
+  const { houses, points } = result.data;
+
+  // swe_houses ascmc order: 0 Asc, 1 MC, 2 ARMC, 3 Vertex, 4 equatorial Asc,
+  // then three co-ascendant variants we do not expose.
+  return {
+    system,
+    cusps: houses.map((cusp) => wrap360(cusp)),
+    ascendant: wrap360(points[0]),
+    midheaven: wrap360(points[1]),
+    armc: wrap360(points[2]),
+    vertex: wrap360(points[3]),
+    equatorialAscendant: wrap360(points[4]),
+  };
+}
+
 export interface UtcInstant {
   readonly year: number;
   readonly month: number;

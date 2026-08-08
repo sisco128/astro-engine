@@ -29,6 +29,9 @@ importers:
       sweph:
         specifier: 2.10.3-7
         version: 2.10.3-7
+      temporal-polyfill:
+        specifier: ^1.0.3
+        version: 1.0.3
     devDependencies:
       '@eslint/js':
         specifier: ^10.0.1
@@ -1166,6 +1169,15 @@ packages:
   sweph@2.10.3-7:
     resolution: {integrity: sha512-C/+CoJ2KNWaDpWbExzZB/z6oyg7zABVPCtIWVV9nbN974tREShNgYjTGFAI+tPj4Iy8FJqL9C7rLyoIdplJZgQ==}
 
+  temporal-polyfill@1.0.3:
+    resolution: {integrity: sha512-U8vuzZBc+dfMIfl8wXWcedfI7AJCxJjjVBIRpJUvIz5+UAp555UJDHguKsfZqHWaHRSdVUThm7mqqIWhN/xPBQ==}
+
+  temporal-spec@1.0.1:
+    resolution: {integrity: sha512-wxVoanmDeavXie1vu2JaQ3WIc3JZnWAOYFBsJyATaVsXsycKYUflGsyBmrRSnoCpZJpwPyr38VpgSUlQ8CbFxg==}
+
+  temporal-utils@1.0.1:
+    resolution: {integrity: sha512-HAixuesxFQIUaQk3ptX2jhfO/FsOkgVkDDMawvp6n/fkB1q6BKfs3lURw9I+pK/2e2e/q/vrLrxmeqauBoyGMQ==}
+
   thread-stream@4.2.0:
     resolution: {integrity: sha512-e2zZ96wSChazBsbENf/Pcm/4swHt2cEKQ92rhUjkL9GCKiTDJIaTBenjE/m9DXi0QBmTMDkFDdOomUy20A1tDQ==}
     engines: {node: '>=20'}
@@ -2287,6 +2299,15 @@ snapshots:
     dependencies:
       node-addon-api: 8.9.1
       node-gyp-build: 4.8.4
+
+  temporal-polyfill@1.0.3:
+    dependencies:
+      temporal-spec: 1.0.1
+      temporal-utils: 1.0.1
+
+  temporal-spec@1.0.1: {}
+
+  temporal-utils@1.0.1: {}
 
   thread-stream@4.2.0:
     dependencies:
