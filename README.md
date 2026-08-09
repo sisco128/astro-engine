@@ -233,8 +233,9 @@ re-seeded, and never otherwise. The image ships the `full` profile at
 
 ## Licence
 
-**AGPL-3.0-or-later.** See [LICENSE](LICENSE) and
-[ADR 0004](docs/adr/0004-agpl-public-repo-mit-contract-package.md).
+**AGPL-3.0-or-later.** See [LICENSE](LICENSE),
+[ADR 0004](docs/adr/0004-agpl-public-repo-mit-contract-package.md) and
+[ADR 0005](docs/adr/0005-open-frontends-openapi-not-mit-package.md).
 
 If you run a modified version of this service and users interact with it over a
 network, AGPL §13 obliges you to offer them the corresponding source.
@@ -242,11 +243,12 @@ network, AGPL §13 obliges you to offer them the corresponding source.
 
 The whole repository is AGPL, including the contract. ADR 0004 anticipated a
 separately MIT-licensed `packages/contract` for private frontends to depend on;
-that package was not built. The contract is `GET /v1/openapi.json` instead — a
+ADR 0005 supersedes that. The contract is `GET /v1/openapi.json` instead — a
 frontend fetches a description of an interface and generates its own client
 from it, linking none of this code, so nothing needs a second licence to keep
 the public/private split intact.
 
-Swiss Ephemeris is © Astrodienst AG, used here under its AGPL option. A
-professional licence from Astrodienst is the alternative, and it buys exactly
-one thing: the right not to publish your source.
+Swiss Ephemeris is © Astrodienst AG, used here under its AGPL option. The
+alternative is the Professional Edition — 700 CHF, one-time, per Astrodienst's
+[published price](https://www.astro.com/swisseph/swephprice_e.htm) — and it
+buys exactly one thing: the right not to publish your source.

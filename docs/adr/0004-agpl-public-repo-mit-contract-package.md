@@ -1,7 +1,13 @@
 # 4. Publish under AGPL-3.0; licence the contract package MIT separately
 
-- Status: accepted
+- Status: partly superseded by
+  [ADR 0005](0005-open-frontends-openapi-not-mit-package.md)
 - Date: 2026-08-08
+
+> The AGPL-3.0 decision below stands and is still in force. The
+> `packages/contract` half does not: the package was built, then removed before
+> merging, and the contract is served as `GET /v1/openapi.json` instead. Read
+> ADR 0005 for what replaced it and why.
 
 ## Context
 
