@@ -25,6 +25,7 @@
 import { initEphemeris } from '../ephemeris/init.js';
 import { seVersion } from '../ephemeris/swe.js';
 import { buildFunnel } from '../transits/funnel.js';
+import { planetaryReturns } from '../transits/returns.js';
 import type { JulianDayUT } from '../ephemeris/swe.js';
 import type { WorkerRequest, WorkerResponse } from './protocol.js';
 
@@ -43,22 +44,34 @@ if (readiness.state !== 'ready') {
 
 send({ kind: 'ready', seVersion: seVersion() });
 
+function compute(message: WorkerRequest): unknown {
+  switch (message.kind) {
+    case 'funnel':
+      return buildFunnel({
+        stories: message.stories,
+        natalPoints: message.natalPoints,
+        fromJd: message.fromJd as JulianDayUT,
+        toJd: message.toJd as JulianDayUT,
+        config: message.config,
+      });
+    case 'returns':
+      return planetaryReturns({
+        bodies: message.bodies,
+        natalLon: new Map(message.natalLon),
+        birthJd: message.birthJd as JulianDayUT,
+        toJd: message.toJd as JulianDayUT,
+      });
+  }
+}
+
 process.on('message', (message: WorkerRequest) => {
   const startedAt = Date.now();
 
   try {
-    const result = buildFunnel({
-      stories: message.stories,
-      natalPoints: message.natalPoints,
-      fromJd: message.fromJd as JulianDayUT,
-      toJd: message.toJd as JulianDayUT,
-      config: message.config,
-    });
-
     send({
       kind: 'result',
       id: message.id,
-      payload: result,
+      payload: compute(message),
       computeMs: Date.now() - startedAt,
     });
   } catch (error) {

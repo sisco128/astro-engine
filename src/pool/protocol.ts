@@ -7,6 +7,7 @@
  */
 
 import type { NatalPoint } from '../transits/funnel.js';
+import type { BodyId } from '../ephemeris/bodies.js';
 import type { FunnelConfig } from '../domain/timescales.js';
 import type { Story } from '../domain/themes.js';
 
@@ -20,7 +21,17 @@ export interface FunnelTask {
   readonly config: FunnelConfig;
 }
 
-export type WorkerRequest = FunnelTask;
+export interface ReturnsTask {
+  readonly kind: 'returns';
+  readonly id: string;
+  readonly bodies: readonly BodyId[];
+  /** Natal longitudes as entries rather than a Map, keeping the message plain. */
+  readonly natalLon: readonly (readonly [BodyId, number])[];
+  readonly birthJd: number;
+  readonly toJd: number;
+}
+
+export type WorkerRequest = FunnelTask | ReturnsTask;
 
 export interface WorkerReady {
   readonly kind: 'ready';

@@ -28,10 +28,19 @@ import { ASPECTS, type AspectId } from '../domain/orb-policy.js';
 import { orbFalloff } from '../domain/scoring-v2.js';
 import type { TierId } from '../domain/timescales.js';
 
-export interface Resonance {
+/**
+ * One body touching one longitude, as a real interval in time.
+ *
+ * Tier-free on purpose: this is the physics — orb intervals and an exact
+ * contact for a moving body against a fixed target — and it applies equally
+ * to a transit against a natal point (the funnel's concern, which tags a
+ * tier) and to a body against its OWN natal position (a planetary return,
+ * which has no tier at all). `Resonance` below adds the funnel's tag; nothing
+ * about finding the contact itself needed it.
+ */
+export interface Contact {
   readonly body: BodyId;
-  readonly tier: TierId;
-  /** The natal point touched. */
+  /** The natal point touched. For a return, the body's own name. */
   readonly member: string;
   readonly aspect: AspectId;
   /**
@@ -51,12 +60,19 @@ export interface Resonance {
   readonly durationDays: number;
 }
 
-export interface ResonanceOptions {
+export interface Resonance extends Contact {
+  readonly tier: TierId;
+}
+
+export interface ContactOptions {
   readonly orbDeg: number;
   readonly aspects: readonly AspectId[];
-  readonly tier: TierId;
   /** Root-finding tolerance in days. 1e-6 is about 0.086 seconds. */
   readonly toleranceDays?: number;
+}
+
+export interface ResonanceOptions extends ContactOptions {
+  readonly tier: TierId;
 }
 
 /**
@@ -80,28 +96,30 @@ export function intensityAt(orb: number, maxOrb: number): number {
 }
 
 /**
- * Every resonance of one body against one natal longitude, over a window.
+ * Every contact of one body against one longitude, over a window.
  *
  * Both contacts of a non-symmetric aspect are scanned separately. The
  * conjunction and opposition are symmetric and have one side each; scanning
  * both would double-count them.
  */
-export interface ResonanceRequest {
+export interface ContactRequest {
   readonly body: BodyId;
   readonly member: string;
   readonly natalLon: number;
   readonly fromJd: JulianDayUT;
   readonly toJd: JulianDayUT;
-  readonly options: ResonanceOptions;
+  readonly options: ContactOptions;
 }
 
+export type ResonanceRequest = ContactRequest & { readonly options: ResonanceOptions };
+
 /** One aspect, one side: scan for orb intervals and their exact contacts. */
-function scanSide(request: ResonanceRequest, aspect: AspectId, side: 1 | -1): Resonance[] {
+function scanSide(request: ContactRequest, aspect: AspectId, side: 1 | -1): Contact[] {
   const { body, member, natalLon, fromJd, toJd, options } = request;
   const tolerance = options.toleranceDays ?? 1e-6;
   const step = scanStepDays(body, options.orbDeg);
   const angle = ASPECTS[aspect].angle;
-  const found: Resonance[] = [];
+  const found: Contact[] = [];
 
   const lonAt = (jd: number): number => bodyState(jd as JulianDayUT, body).lon;
   // Signed distance from the contact. Zero exactly at it; changes sign
@@ -113,7 +131,7 @@ function scanSide(request: ResonanceRequest, aspect: AspectId, side: 1 | -1): Re
   const close = (enterJd: number, exitJd: number): void => {
     const contact = findExactContact(f, enterJd, exitJd, tolerance);
     if (contact !== undefined) {
-      found.push(buildResonance({ body, member, aspect, side, enterJd, exitJd, contact, options }));
+      found.push(buildContact({ body, member, aspect, side, enterJd, exitJd, contact }));
     }
   };
 
@@ -141,8 +159,14 @@ function scanSide(request: ResonanceRequest, aspect: AspectId, side: 1 | -1): Re
   return found;
 }
 
-export function resonancesFor(request: ResonanceRequest): Resonance[] {
-  const found: Resonance[] = [];
+/**
+ * Every contact of one body against one longitude — a return, its squares and
+ * its opposition are exactly this, targeted at the body's own natal position
+ * instead of a different natal point. No tier: a body meeting itself is not
+ * part of the funnel's fractal, it is its own independent cycle.
+ */
+export function contactsFor(request: ContactRequest): Contact[] {
+  const found: Contact[] = [];
 
   for (const aspect of request.options.aspects) {
     // Conjunction and opposition are symmetric and have one contact each;
@@ -153,6 +177,11 @@ export function resonancesFor(request: ResonanceRequest): Resonance[] {
 
   found.sort((a, b) => a.exactJd - b.exactJd);
   return found;
+}
+
+/** `contactsFor`, tagged with the funnel tier the caller is scanning at. */
+export function resonancesFor(request: ResonanceRequest): Resonance[] {
+  return contactsFor(request).map((contact) => ({ ...contact, tier: request.options.tier }));
 }
 
 /**
@@ -198,7 +227,7 @@ function findExactContact(
   return { jd: bestJd, precision: width / samples };
 }
 
-function buildResonance(input: {
+function buildContact(input: {
   body: BodyId;
   member: string;
   aspect: AspectId;
@@ -206,13 +235,11 @@ function buildResonance(input: {
   enterJd: number;
   exitJd: number;
   contact: { jd: number; precision: number };
-  options: ResonanceOptions;
-}): Resonance {
-  const { body, member, aspect, side, enterJd, exitJd, contact, options } = input;
+}): Contact {
+  const { body, member, aspect, side, enterJd, exitJd, contact } = input;
 
   return {
     body,
-    tier: options.tier,
     member,
     aspect,
     side,

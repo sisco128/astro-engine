@@ -18,6 +18,17 @@ import { fileURLToPath } from 'node:url';
 import { env } from '../config/env.js';
 import type { WorkerRequest, WorkerResponse } from './protocol.js';
 
+/**
+ * A task as callers submit it — the pool assigns the id. Distributive on
+ * purpose: plain `Omit` over a union keeps only the common keys, which would
+ * strip every kind-specific field from both task types at once.
+ */
+export type PoolTask = WorkerRequest extends infer R
+  ? R extends WorkerRequest
+    ? Omit<R, 'id'>
+    : never
+  : never;
+
 export class PoolError extends Error {
   readonly code: string;
 
@@ -205,7 +216,7 @@ export class ComputePool {
     return this.queue.length;
   }
 
-  run<T>(task: Omit<WorkerRequest, 'id'>): Promise<T> {
+  run<T>(task: PoolTask): Promise<T> {
     if (this.closing) {
       return Promise.reject(new PoolError('COMPUTE_UNAVAILABLE', 'The pool is shutting down'));
     }

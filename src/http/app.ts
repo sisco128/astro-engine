@@ -20,6 +20,7 @@ import { ComputePool } from '../pool/pool.js';
 import { LocalTimeError } from '../time/local-to-utc.js';
 import { registerChartRoutes } from './routes/v1/charts.js';
 import { registerKeyDateRoutes } from './routes/v1/key-dates.js';
+import { registerReturnRoutes } from './routes/v1/returns.js';
 
 /** HTTP status for each error code. Frozen at /v1. */
 const STATUS_BY_CODE: Readonly<Record<string, number>> = {
@@ -177,6 +178,7 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   registerChartRoutes(app);
   registerKeyDateRoutes(app, pool, cache);
+  registerReturnRoutes(app, pool, cache);
 
   initEphemeris();
 
