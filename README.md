@@ -198,6 +198,39 @@ knowing before you write code:
   version lives in `src/version.ts` and nowhere else; it used to be a private
   const in four files at once, and it stamps both cache keys and responses.
 
+## Deploy
+
+```bash
+pnpm build     # tsc -p tsconfig.build.json → dist/
+pnpm start     # node dist/main.js
+```
+
+`tsconfig.build.json` compiles `src/` alone, re-rooted, so the entrypoint lands
+at `dist/main.js` and the compute worker at `dist/pool/worker.js`. That second
+path matters more than it looks: `src/pool/pool.ts` picks `worker.ts` or
+`worker.js` from its own file extension, so a build is only proven by booting
+it and watching `/v1/ready` turn 200 — readiness waits for a forked worker to
+report in. CI does exactly that on every run.
+
+### Docker
+
+```bash
+docker build -t astro-engine .
+docker run --rm -p 3000:3000 astro-engine
+curl localhost:3000/v1/ready
+```
+
+Multi-stage, `node:22-slim`, non-root, `HEALTHCHECK` on `/v1/ready`. No
+compiler is involved: `sweph` ships prebuilt N-API binaries for linux.
+
+The design point is that **the ephemeris gets a stage of its own**, which
+copies nothing but `ephemeris.manifest.json` and the fetch script. The 103 MB
+of `.se1` data is immutable and slow to download — far slower than compiling
+the whole engine — so its layer is keyed on the manifest and survives every
+code, dependency and config change. It is re-downloaded when the manifest is
+re-seeded, and never otherwise. The image ships the `full` profile at
+`/app/ephem`, with `SE_EPHE_PATH` already pointing there.
+
 ## Licence
 
 **AGPL-3.0-or-later.** See [LICENSE](LICENSE) and

@@ -1,0 +1,24 @@
+{
+  /* What `pnpm build` compiles. The base config exists for editors and
+     `pnpm typecheck`, so it spans src, scripts and tests with rootDir "." —
+     emitted as-is that layout would put the entrypoint at dist/src/main.js,
+     and `pnpm start` (node dist/main.js) would never find it. This config
+     narrows the world to src/ and re-roots it, so src/main.ts lands at
+     dist/main.js and src/pool/worker.ts at dist/pool/worker.js — the exact
+     path the pool forks in production. */
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    /* outDir, sourceMap and noEmit are restated rather than inherited. The
+       only config that produces shippable artefacts should not depend on the
+       base for where they land or whether they are written at all: `pnpm
+       typecheck` passes --noEmit on the command line today, but moving that
+       flag into tsconfig.json is an obvious tidy-up, and it would otherwise
+       turn `pnpm build` into a silent no-op. Sourcemaps ship because a stack
+       trace from dist is unreadable without them. */
+    "outDir": "dist",
+    "sourceMap": true,
+    "noEmit": false
+  },
+  "include": ["src/**/*.ts"]
+}
