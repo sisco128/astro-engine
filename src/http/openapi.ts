@@ -84,6 +84,26 @@ function errorResponse(description: string): Record<string, unknown> {
 }
 
 /**
+ * The 401 every authenticated operation shares.
+ *
+ * Whether it can actually happen is a property of the deployment, not of the
+ * contract: a service running with no API_KEYS never returns it. Documented
+ * unconditionally because this document is built once from code that cannot
+ * see the configuration — and because a generated client that handles 401 on a
+ * key-less deployment loses nothing, while one that does not handle it against
+ * a keyed deployment breaks.
+ */
+const UNAUTHORIZED = errorResponse(
+  'No `x-api-key` header, or one that matches no configured key (UNAUTHORIZED).',
+);
+
+/**
+ * Marks an operation as reachable without a key, overriding the document-wide
+ * `security` requirement.
+ */
+const PUBLIC: Record<string, unknown> = { security: [] };
+
+/**
  * Build the document.
  *
  * A pure function of the code: nothing here reads configuration or request
@@ -108,9 +128,15 @@ export function buildOpenApiDocument(): Record<string, unknown> {
     // so "the server you fetched this from" is always the right answer, and a
     // hardcoded host would be wrong in every deployment but one.
     servers: [{ url: '/', description: 'The server this document was fetched from.' }],
+    // Document-wide, with the three endpoints that cannot require a key opting
+    // out individually. A deployment with no API_KEYS configured enforces none
+    // of this; the requirement is described here because the contract has to
+    // be the same document whether or not a given deployment turned auth on.
+    security: [{ apiKey: [] }],
     paths: {
       '/v1/health': {
         get: {
+          ...PUBLIC,
           operationId: 'getHealth',
           summary: 'Liveness',
           description:
@@ -122,6 +148,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
       },
       '/v1/ready': {
         get: {
+          ...PUBLIC,
           operationId: 'getReady',
           summary: 'Readiness',
           description:
@@ -137,13 +164,34 @@ export function buildOpenApiDocument(): Record<string, unknown> {
       },
       '/v1/meta/license': {
         get: {
+          // Public whatever the deployment configures, and the one endpoint
+          // where that is a legal property rather than a convenience: §13 owes
+          // the offer to every network user, including the ones with no key.
+          ...PUBLIC,
           operationId: 'getLicense',
           summary: 'Licence and source location',
           description:
             'AGPL-3.0 §13 obliges anyone running this service over a network to offer its users ' +
-            'the Corresponding Source; this endpoint is how they find it.',
+            'the Corresponding Source; this endpoint is how they find it. Never requires a key.',
           responses: {
             '200': coarseResponse('Licence identifier, public source URL, and dependency notices.'),
+          },
+        },
+      },
+      '/v1/meta/stats': {
+        get: {
+          operationId: 'getStats',
+          summary: 'Operational counters',
+          description:
+            'Cache hits, misses and entry count; compute-pool readiness and queue depth; process ' +
+            'uptime in seconds. Numbers only — no request content, no configuration, and no ' +
+            'process memory figures.',
+          responses: {
+            '200': coarseResponse(
+              'Counters: `{ cache: { hits, misses, size }, pool: { ready, queueDepth }, ' +
+                'process: { uptimeSeconds } }`.',
+            ),
+            '401': UNAUTHORIZED,
           },
         },
       },
@@ -154,7 +202,10 @@ export function buildOpenApiDocument(): Record<string, unknown> {
           description:
             'Tiers, presets, aspect identifiers, nesting rules and limits — everything a client ' +
             'needs to build the `funnel` field of POST /v1/transits/key-dates without guessing.',
-          responses: { '200': coarseResponse('The funnel configuration vocabulary.') },
+          responses: {
+            '200': coarseResponse('The funnel configuration vocabulary.'),
+            '401': UNAUTHORIZED,
+          },
         },
       },
       '/v1/meta/life-phases': {
@@ -165,7 +216,10 @@ export function buildOpenApiDocument(): Record<string, unknown> {
             'The whole chart-independent catalogue, including phases a given chart never reaches ' +
             'inside its horizon. A client drawing a timeline needs the phases that exist, not ' +
             'only the ones a particular request happened to produce.',
-          responses: { '200': coarseResponse('The life-phase catalogue, keyed by body.') },
+          responses: {
+            '200': coarseResponse('The life-phase catalogue, keyed by body.'),
+            '401': UNAUTHORIZED,
+          },
         },
       },
       '/v1/charts': {
@@ -180,6 +234,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
           responses: {
             '200': jsonResponse('The calculated chart.', jsonSchema(ChartResponseSchema, 'output')),
             '400': errorResponse('Malformed request (VALIDATION_FAILED, INVALID_TIME_ZONE, …).'),
+            '401': UNAUTHORIZED,
             '409': errorResponse(
               'The wall-clock time does not resolve: it fell in a DST gap ' +
                 '(NONEXISTENT_LOCAL_TIME) or happened twice (AMBIGUOUS_LOCAL_TIME, with both ' +
@@ -214,6 +269,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
               'Malformed request, an unknown funnel preset, `to` not after `from`, or a span ' +
                 'beyond the limit (WINDOW_TOO_LARGE, with the limit in `details`).',
             ),
+            '401': UNAUTHORIZED,
             '409': errorResponse('The wall-clock birth time does not resolve (DST gap or fold).'),
           },
         },
@@ -239,12 +295,24 @@ export function buildOpenApiDocument(): Record<string, unknown> {
               'Malformed request (VALIDATION_FAILED) — including a body excluded from transits ' +
                 'for measured reasons, or a horizon beyond a human lifetime.',
             ),
+            '401': UNAUTHORIZED,
             '409': errorResponse('The wall-clock birth time does not resolve (DST gap or fold).'),
           },
         },
       },
     },
     components: {
+      securitySchemes: {
+        apiKey: {
+          type: 'apiKey',
+          in: 'header',
+          name: 'x-api-key',
+          description:
+            'One of the keys the deployment was configured with. A deployment with none ' +
+            'configured accepts every request; /v1/health, /v1/ready and /v1/meta/license are ' +
+            'reachable without a key in every deployment.',
+        },
+      },
       schemas: {
         // Documented once and referenced everywhere. The envelope is frozen at
         // /v1: every non-2xx response from every endpoint has this shape, and
@@ -262,11 +330,13 @@ export function buildOpenApiDocument(): Record<string, unknown> {
                 code: {
                   type: 'string',
                   description:
-                    'Stable machine-readable identifier — VALIDATION_FAILED, WINDOW_TOO_LARGE, ' +
-                    'NONEXISTENT_LOCAL_TIME, AMBIGUOUS_LOCAL_TIME, ' +
-                    'HOUSE_SYSTEM_UNDEFINED_AT_LATITUDE, EPHEMERIS_UNAVAILABLE, NOT_FOUND, ' +
-                    'INTERNAL, and the rest of STATUS_BY_CODE in src/http/app.ts. Branch on ' +
-                    'this, not on the message.',
+                    'Stable machine-readable identifier — UNAUTHORIZED, VALIDATION_FAILED, ' +
+                    'WINDOW_TOO_LARGE, NONEXISTENT_LOCAL_TIME, AMBIGUOUS_LOCAL_TIME, ' +
+                    'HOUSE_SYSTEM_UNDEFINED_AT_LATITUDE, EPHEMERIS_UNAVAILABLE, ' +
+                    'SERVICE_OVERLOADED, NOT_FOUND, INTERNAL, and the rest of STATUS_BY_CODE in ' +
+                    'src/http/app.ts. Branch on this, not on the message. SERVICE_OVERLOADED ' +
+                    'carries a Retry-After header and can arrive from any endpoint: it is the ' +
+                    'process shedding load before the request reaches a route.',
                 },
                 message: {
                   type: 'string',

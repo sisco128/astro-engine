@@ -25,6 +25,7 @@ const DOCUMENTED_PATHS = [
   '/v1/health',
   '/v1/ready',
   '/v1/meta/license',
+  '/v1/meta/stats',
   '/v1/meta/funnel',
   '/v1/meta/life-phases',
   '/v1/charts',
@@ -35,13 +36,18 @@ const DOCUMENTED_PATHS = [
 interface OpenApiDocument {
   openapi: string;
   info: { title: string; version: string; license: { identifier: string } };
+  security: Record<string, string[]>[];
   paths: Record<string, Record<string, Operation>>;
-  components: { schemas: Record<string, JsonSchema> };
+  components: {
+    schemas: Record<string, JsonSchema>;
+    securitySchemes: Record<string, { type: string; in: string; name: string }>;
+  };
 }
 
 interface Operation {
   operationId: string;
   summary: string;
+  security?: Record<string, string[]>[];
   requestBody?: { required: boolean; content: Record<string, { schema: JsonSchema }> };
   responses: Record<
     string,
@@ -127,6 +133,42 @@ describe('GET /v1/openapi.json', () => {
     );
     expect(ids).toHaveLength(DOCUMENTED_PATHS.length);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe('authentication is part of the contract', () => {
+  it('describes the header a client has to send', () => {
+    const scheme = doc.components.securitySchemes['apiKey'];
+    expect(scheme?.type).toBe('apiKey');
+    expect(scheme?.in).toBe('header');
+    // Lower-case, because that is what a header is on the wire and what the
+    // hook in src/http/app.ts reads.
+    expect(scheme?.name).toBe('x-api-key');
+  });
+
+  it('requires it document-wide and exempts exactly the three public routes', () => {
+    expect(doc.security).toEqual([{ apiKey: [] }]);
+
+    // The same three routes the hook lets through, asserted from the other
+    // side. /v1/meta/license is here for a legal reason, not a convenience:
+    // AGPL-3.0 §13 owes the source offer to every network user.
+    const exempt = Object.entries(doc.paths)
+      .filter(([, methods]) => Object.values(methods).some((op) => op.security?.length === 0))
+      .map(([path]) => path);
+
+    expect(exempt.sort()).toEqual(['/v1/health', '/v1/meta/license', '/v1/ready']);
+  });
+
+  it('documents a 401 on every operation that is not exempt', () => {
+    for (const [path, methods] of Object.entries(doc.paths)) {
+      for (const operation of Object.values(methods)) {
+        if (operation.security?.length === 0) {
+          expect(operation.responses['401'], `${path} is public`).toBeUndefined();
+          continue;
+        }
+        expect(operation.responses['401'], `${path} is authenticated`).toBeDefined();
+      }
+    }
   });
 });
 

@@ -58,6 +58,7 @@ compiler is needed — `sweph` ships prebuilt N-API binaries.
 | `GET`  | `/v1/ready`              | Readiness — ephemeris state, library version, probe, pool.         |
 | `GET`  | `/v1/openapi.json`       | The machine-readable contract. See below.                          |
 | `GET`  | `/v1/meta/license`       | Licence and source URL (AGPL-3.0 §13).                             |
+| `GET`  | `/v1/meta/stats`         | Operational counters: cache, pool, uptime.                         |
 | `GET`  | `/v1/meta/funnel`        | Funnel vocabulary: tiers, presets, aspects, nesting rules, limits. |
 | `GET`  | `/v1/meta/life-phases`   | The life-phase catalogue, chart-independent.                       |
 | `POST` | `/v1/charts`             | Natal chart. Deterministic; carries a strong ETag.                 |
@@ -72,6 +73,36 @@ Every non-2xx response from every endpoint has the same envelope — branch on
 ```
 
 `/v1/ready` is the exception: its 503 is a readiness report, not an error.
+
+### Authentication
+
+Set `API_KEYS` to a comma-separated list and every endpoint but three requires
+one of them in an `x-api-key` header; anything else is `401 UNAUTHORIZED` in the
+usual envelope, including unknown paths, so an anonymous caller cannot use the
+responses to enumerate the surface. Leave it empty and there is no
+authentication at all, which is what local development gets.
+
+```bash
+curl -H 'x-api-key: …' localhost:3000/v1/meta/stats
+```
+
+Three endpoints answer without a key whatever is configured. `/v1/health` and
+`/v1/ready` because load balancers and orchestrators call them with no
+credentials, and a probe that can fail on configuration is not a probe.
+`/v1/meta/license` because AGPL-3.0 §13 obliges this service to offer its
+corresponding source to _the users who interact with it over a network_ — all of
+them — and an offer that requires credentials to read is not an offer.
+
+**With `NODE_ENV=production` and an empty `API_KEYS`, the process refuses to
+start.** The trap that prevents is the quiet one: a deploy that drops one
+variable comes up healthy, passes its readiness probe, and serves everything to
+anyone who finds the host, looking exactly like a correct deployment.
+`AUTH_OPTIONAL=true` is the way to say that an open API is intended — because
+something in front authenticates for it, say — and it has to be said by name.
+
+Keys are compared as SHA-256 digests through `crypto.timingSafeEqual`, and the
+rate limiter buckets on the presented key rather than the source address when
+that key is a valid one, so the limit is per caller instead of per NAT.
 
 ### The contract
 
@@ -172,7 +203,9 @@ rather than at the first request.
 The ones that decide whether results are trustworthy are `SE_EPHE_PATH`,
 `SE_STRICT_EPHEMERIS` and `SE_FORBID_FALLBACK` — read the comments above them
 before turning any of the last two off. `CORS_ORIGINS` is not optional in
-production: the engine exists to be called from other origins.
+production: the engine exists to be called from other origins. Neither is
+`API_KEYS`, and that one is enforced rather than advised — see
+[Authentication](#authentication).
 
 Design decisions and their trade-offs are recorded in [`docs/adr/`](docs/adr).
 
@@ -216,12 +249,18 @@ report in. CI does exactly that on every run.
 
 ```bash
 docker build -t astro-engine .
-docker run --rm -p 3000:3000 astro-engine
+docker run --rm -p 3000:3000 -e API_KEYS=some-key astro-engine
 curl localhost:3000/v1/ready
 ```
 
-Multi-stage, `node:22-slim`, non-root, `HEALTHCHECK` on `/v1/ready`. No
-compiler is involved: `sweph` ships prebuilt N-API binaries for linux.
+The image sets `NODE_ENV=production`, so `API_KEYS` is not optional here: run it
+without one and the container exits at startup with a message saying so. That is
+the intended behaviour — see [Authentication](#authentication) — and
+`AUTH_OPTIONAL=true` is the deliberate way out of it.
+
+Multi-stage, `node:22-slim`, non-root, `HEALTHCHECK` on `/v1/ready` — which
+needs no key, in every deployment, for exactly this reason. No compiler is
+involved: `sweph` ships prebuilt N-API binaries for linux.
 
 The design point is that **the ephemeris gets a stage of its own**, which
 copies nothing but `ephemeris.manifest.json` and the fetch script. The 103 MB
