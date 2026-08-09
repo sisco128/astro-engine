@@ -30,6 +30,7 @@ import { registerChartRoutes } from './routes/v1/charts.js';
 import { registerGeoRoutes } from './routes/v1/geo.js';
 import { registerKeyDateRoutes } from './routes/v1/key-dates.js';
 import { registerReturnRoutes } from './routes/v1/returns.js';
+import { registerStoryWindowRoutes } from './routes/v1/story-windows.js';
 
 /** HTTP status for each error code. Frozen at /v1. */
 const STATUS_BY_CODE: Readonly<Record<string, number>> = {
@@ -54,6 +55,12 @@ const STATUS_BY_CODE: Readonly<Record<string, number>> = {
   AMBIGUOUS_LOCAL_TIME: 409,
   INVALID_TIME_ZONE: 400,
   WINDOW_TOO_LARGE: 400,
+  // 404, and deliberately not an empty 200. A story signature names a
+  // configuration a client stored in an earlier session; a chart that does not
+  // carry it means the wrong chart or a stale signature, and both are different
+  // from the story simply having been quiet — which is an answer
+  // /v1/transits/story-windows gives legitimately and often.
+  STORY_NOT_IN_CHART: 404,
   // 502, not 503: the engine is fine, a service it depends on is not, and the
   // distinction tells a caller whether retrying here is worth anything.
   GEO_UPSTREAM_FAILED: 502,
@@ -442,6 +449,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   registerGeoRoutes(app, geoSearch);
   registerKeyDateRoutes(app, pool, cache);
   registerReturnRoutes(app, pool, cache);
+  registerStoryWindowRoutes(app, pool, cache);
 
   initEphemeris();
 

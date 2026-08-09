@@ -219,3 +219,12 @@ export function registerKeyDateRoutes(
 }
 
 export { EphemerisError };
+
+/**
+ * Exported for story-windows.ts, which answers over the same Julian Days
+ * produced by the same funnel. A private copy there would be the third of this
+ * conversion in this directory, and two endpoints that report the same window
+ * on two different dates is precisely the drift an export is cheap enough to
+ * prevent.
+ */
+export { isoToJd, jdToIso };
