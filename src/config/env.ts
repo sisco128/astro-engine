@@ -91,6 +91,10 @@ export const env = Object.freeze({
   poolSize: int('POOL_SIZE', 0) || defaultPoolSize,
   poolTaskTimeoutMs: int('POOL_TASK_TIMEOUT_MS', 60_000),
 
+  /** Result cache. Bounded by both count and bytes: entries are multi-MB. */
+  cacheMaxItems: int('CACHE_MAX_ITEMS', 500),
+  cacheMaxBytes: int('CACHE_MAX_BYTES', 256 * 1024 * 1024),
+
   requestTimeoutMs: int('REQUEST_TIMEOUT_MS', 30_000),
   maxBodyBytes: int('MAX_BODY_BYTES', 262_144),
 

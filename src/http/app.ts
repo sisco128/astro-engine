@@ -15,6 +15,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { env } from '../config/env.js';
 import { EphemerisError } from '../ephemeris/errors.js';
 import { initEphemeris, report } from '../ephemeris/init.js';
+import { ResultCache } from '../cache/result-cache.js';
 import { ComputePool } from '../pool/pool.js';
 import { LocalTimeError } from '../time/local-to-utc.js';
 import { registerChartRoutes } from './routes/v1/charts.js';
@@ -40,9 +41,13 @@ const STATUS_BY_CODE: Readonly<Record<string, number>> = {
   WINDOW_TOO_LARGE: 400,
 };
 
+/** Kept in one place: the version stamped on responses and on cache keys. */
+const ENGINE_VERSION = '0.1.0';
+
 declare module 'fastify' {
   interface FastifyInstance {
     pool: ComputePool;
+    cache: ResultCache;
   }
 }
 
@@ -163,12 +168,15 @@ export async function buildApp(): Promise<FastifyInstance> {
   // event loop for its whole duration and /v1/health would queue behind it.
   const pool = new ComputePool();
   app.decorate('pool', pool);
+
+  const cache = new ResultCache(ENGINE_VERSION);
+  app.decorate('cache', cache);
   app.addHook('onClose', async () => {
     await pool.close();
   });
 
   registerChartRoutes(app);
-  registerKeyDateRoutes(app, pool);
+  registerKeyDateRoutes(app, pool, cache);
 
   initEphemeris();
 

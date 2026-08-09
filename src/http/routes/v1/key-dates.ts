@@ -13,6 +13,7 @@ import {
   type JulianDayUT,
 } from '../../../ephemeris/swe.js';
 import { resolveLocalTime } from '../../../time/local-to-utc.js';
+import type { ResultCache } from '../../../cache/result-cache.js';
 import type { ComputePool } from '../../../pool/pool.js';
 import type { FunnelResult } from '../../../transits/funnel.js';
 import {
@@ -35,7 +36,11 @@ function jdToIso(jd: number): string {
   return new Date((jd - 2440587.5) * 86_400_000).toISOString();
 }
 
-export function registerKeyDateRoutes(app: FastifyInstance, pool: ComputePool): void {
+export function registerKeyDateRoutes(
+  app: FastifyInstance,
+  pool: ComputePool,
+  cache: ResultCache,
+): void {
   app.get('/v1/meta/funnel', () => funnelMetadata());
 
   app.post('/v1/transits/key-dates', async (request, reply) => {
@@ -132,18 +137,35 @@ export function registerKeyDateRoutes(app: FastifyInstance, pool: ComputePool): 
 
     const { stories } = identifyStories(natalPoints, { scoring: input.scoring });
 
-    // Off the event loop and into a worker process. The whole point is that
-    // /v1/health keeps answering while this runs.
-    const funnel = await pool.run<FunnelResult>({
-      kind: 'funnel',
-      stories,
-      natalPoints,
+    // Everything that determines the funnel, and nothing that does not. A
+    // request id or a timestamp in here would make every lookup a miss while
+    // appearing to work.
+    const cacheKey = cache.key({
+      chartRef: chart.chartRef,
       fromJd,
       toJd,
       config,
+      scoring: input.scoring,
     });
 
-    return reply.send({
+    let funnel = cache.get<FunnelResult>(cacheKey);
+    const cacheHit = funnel !== undefined;
+
+    if (funnel === undefined) {
+      // Off the event loop and into a worker process. The whole point is that
+      // /v1/health keeps answering while this runs.
+      funnel = await pool.run<FunnelResult>({
+        kind: 'funnel',
+        stories,
+        natalPoints,
+        fromJd,
+        toJd,
+        config,
+      });
+      cache.set(cacheKey, funnel);
+    }
+
+    return reply.header('X-Cache', cacheHit ? 'hit' : 'miss').send({
       chartRef: chart.chartRef,
       engine: { version: ENGINE_VERSION, se: seVersion() },
       // Echoed so a client never has to guess what a preset resolved to.
