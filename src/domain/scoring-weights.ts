@@ -7,9 +7,18 @@
  * is altered — but it makes the model reviewable, and it lets a `scoringVersion`
  * ship in the response so a frontend can tell when the weighting moved.
  *
- * Two properties of this model are worth flagging rather than silently
- * carrying forward. Both are preserved exactly; both look like accidents.
- * See the notes on `maxOrbMinutes` and `relationalBonus`.
+ * Three properties of this model looked like accidents. All three are still
+ * preserved exactly — v1's contract is to reproduce prototype results — but
+ * they are no longer suspicions. scripts/measure-scoring-v1.ts re-scores the
+ * same stories with one factor changed at a time over ten charts spanning nine
+ * decades and both hemispheres (76 stories), and each note below states what
+ * was measured. Re-run it before touching any number here.
+ *
+ * One result applies to all three and is worth stating once: no variant ever
+ * changed the SET of stories, on any chart. Membership is decided by
+ * identifyComposites and the orb policy before scoring runs, so a weight can
+ * only reorder stories, never add or remove one. Everything below is therefore
+ * about ranking and magnitude.
  */
 
 import type { AspectId } from './orb-policy.js';
@@ -28,23 +37,41 @@ export const SCORING_V1 = {
   /**
    * themes.js:345-351. Multiplied by `baseScoreMultiplier` to form the base.
    *
-   * WARNING: `conjunction: 5` is unreachable, and it is the highest weight in
-   * the table.
+   * `conjunction: 5` is the highest weight in the table and no chart can reach
+   * it. The effective maximum is the opposition at 4.
    *
-   * Composite fusion uses `compositeConjunctionOrbDeg` = 10, and the natal
-   * conjunction orb is also 10. Two composites close enough to be conjunct
-   * therefore have members close enough to have already fused into one
-   * composite — so there is no pair, and no story. The effective maximum is
-   * the opposition at 4.
+   * The proof, for charts. Fusion joins points within
+   * `compositeConjunctionOrbDeg` = 10 transitively, so composites occupy
+   * disjoint arcs separated by gaps strictly wider than 10 degrees. A
+   * composite's `lon` is the circular mean of its members, and for a set inside
+   * an arc narrower than 180 degrees that mean lies inside the arc. Every route
+   * between two arcs crosses a gap, so two composite means are always more than
+   * 10 degrees apart — and `aspectBetween` needs 10 or less, the natal
+   * conjunction orb being 10 as well. The 180-degree condition always holds
+   * here: the funnel route feeds a fixed 14 points (DEFAULT_BODIES plus the two
+   * angles), which chain across at most 13 gaps of 10 degrees, so no composite
+   * can span more than 130.
    *
-   * Verified empirically: 60,000 random chart layouts produced zero
-   * conjunction stories, and tests/unit/themes.test.ts asserts it
-   * deterministically.
+   * Measured over the ten charts: zero conjunction stories, widest composite
+   * 20.2 degrees, and the closest pair of composite means 10.5 degrees. The
+   * margin over the 10-degree orb is real but thin, which is why the argument
+   * above is stated rather than left to the sample.
    *
-   * Preserved because removing it would change nothing about behaviour while
-   * discarding evidence of what the model's author intended. Fixing it — by
-   * making the fusion orb tighter than the conjunction orb — would be a real
-   * change to every chart's rankings and needs its own decision.
+   * NOT deleted, and the reason is not sentiment. `identifyStories` is exported
+   * and accepts any points, not only charts. A synthetic 268-point set whose
+   * composite wraps past 180 degrees with its mass at both ends puts the
+   * circular mean outside its own arc, in the empty gap, and does produce a
+   * conjunction story — scripts/measure-scoring-v1.ts constructs it. Removing
+   * this entry drops that story's base from 500 to 0 via the `?? 0` in
+   * themes.ts, so deletion is not output-preserving and the "dead weight"
+   * reading is wrong.
+   *
+   * Nothing serves this table to clients: /v1/meta offers license, funnel and
+   * life-phases only, and /v1/charts carries no stories. So observability is
+   * not what keeps the entry — reachability is.
+   *
+   * Fixing the model instead — making the fusion orb tighter than the
+   * conjunction orb — would re-rank every chart and needs its own decision.
    */
   aspectImportance: {
     conjunction: 5,
@@ -59,12 +86,21 @@ export const SCORING_V1 = {
   /**
    * themes.js:304. Ten degrees, expressed in arcminutes.
    *
-   * Note it is a single constant for every aspect. The square's orb is 6
-   * degrees, so a square at the very edge of its orb still scores
-   * (1 - 360/600)^2 = 0.16 rather than falling to zero; the trine at 7 degrees
-   * scores 0.09. Only the conjunction, whose orb is also 10 degrees, actually
-   * reaches zero at its limit. Whether that was intended is unknown, and it is
-   * preserved here unchanged.
+   * It is a single constant for every aspect. The square's orb is 6 degrees, so
+   * a square at the very edge of its orb still scores (1 - 360/600)^2 = 0.16
+   * rather than falling to zero; the trine at 7 degrees scores 0.09. Only the
+   * conjunction, whose orb is also 10 degrees, reaches zero at its limit.
+   *
+   * This is the largest of the three accidents by score and the smallest by
+   * consequence. Dividing by each aspect's own orb instead moves scores by up
+   * to 98.8% — a near doubling for a square out near its limit — and reorders
+   * 6 of the 10 charts. But no story moves more than 2 places, and the top
+   * story does not change on ANY chart. The falloff decides magnitudes; it does
+   * not decide what a chart is said to be about.
+   *
+   * Preserved because v1 must reproduce prototype numbers, and a 98.8% score
+   * shift is exactly the kind of change that would do so silently. scoring-v2
+   * normalises by the aspect's own orb, which is the fix.
    */
   maxOrbMinutes: 600,
 
@@ -74,12 +110,31 @@ export const SCORING_V1 = {
   /**
    * themes.js:241-246. Symmetric; the pair is looked up in either order.
    *
-   * Note the magnitude. This is added to a base score of 200-500, so the
-   * largest bonus available moves the result by about one percent. Every other
-   * factor in the model is multiplicative. A "bonus" that additive is
-   * effectively inert, which reads like an intended `*` that was typed as `+`
-   * (themes.js:368). Preserved as written — changing it would silently
-   * re-rank every chart ever scored.
+   * Added to a base of 200-500 where every other factor multiplies, which reads
+   * like an intended `*` typed as `+` (themes.js:368). Measured, "effectively
+   * inert" turns out to be literally true: DELETING the bonus outright changes
+   * no ranking on any of the ten charts, not one position. Its ceiling is 2.44%
+   * of a story's score — reached on a square, whose base of 200 is the smallest
+   * — and 23 of the 76 stories receive no bonus at all, because Pluto, the true
+   * node and Chiron are absent from `planetCategory` below.
+   *
+   * So the accident costs nothing as written. What it would cost to "fix" is
+   * the part worth knowing:
+   *
+   *   base * bonus, the literal typo reading   reorders 10/10 charts,
+   *                                            top story changes on 5,
+   *                                            a story moves up to 9 places,
+   *                                            scores move up to +394%
+   *   base * (1 + (rank-1)/8), as v2 does it   reorders 7/10 charts,
+   *                                            top story changes on 1,
+   *                                            up to 3 places, up to 48%
+   *
+   * The literal reading is also destructive rather than merely different: with
+   * a bonus of 0 for any uncategorised body it zeroes 23 stories outright.
+   *
+   * Preserved as written. Not because the change is unknowable — it is right
+   * there — but because it is large, and v1 exists to reproduce the old
+   * numbers. scoring-v2 carries the scaled version.
    */
   relationalBonus: {
     'personal+personal': 1,

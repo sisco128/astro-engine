@@ -284,6 +284,203 @@ describe('the two constants that look like accidents', () => {
   });
 });
 
+/**
+ * Ten real charts, spanning nine decades and both hemispheres.
+ *
+ * Longitudes in DEFAULT_BODIES order, then Ascendant and Midheaven, produced by
+ * `pnpm tsx scripts/measure-scoring-v1.ts --fixtures` against the repository
+ * ephemeris. Frozen here rather than recomputed so this stays a unit test: the
+ * relationship being pinned is between two scoring functions, and it should not
+ * fail because an ephemeris file is missing.
+ *
+ * Six decimal places is four orders of magnitude finer than any orb in the
+ * model, and the fixtures were checked to reproduce the script's rankings
+ * exactly.
+ */
+const REFERENCE_POINT_IDS = [
+  'sun',
+  'moon',
+  'mercury',
+  'venus',
+  'mars',
+  'jupiter',
+  'saturn',
+  'uranus',
+  'neptune',
+  'pluto',
+  'trueNode',
+  'chiron',
+  'ascendant',
+  'midheaven',
+] as const;
+
+const REFERENCE_CHARTS: readonly { label: string; lons: readonly number[] }[] = [
+  {
+    label: 'Rome 1987',
+    lons: [
+      139.155663, 0.225028, 130.771114, 136.165501, 143.367176, 29.638134, 254.573059, 262.888415,
+      275.56302, 217.329241, 3.126491, 86.915252, 200.198433, 113.917525,
+    ],
+  },
+  {
+    label: 'Berlin 1934',
+    lons: [
+      57.496419, 120.598626, 64.719656, 13.986156, 49.56136, 194.020066, 327.840844, 29.106671,
+      159.598762, 112.90542, 313.214268, 63.719126, 75.819497, 309.113601,
+    ],
+  },
+  {
+    label: 'Buenos Aires 1952',
+    lons: [
+      344.254396, 88.794586, 354.714954, 315.593991, 226.113222, 17.01905, 193.630753, 99.980023,
+      201.259984, 139.783547, 330.504664, 280.992476, 140.012151, 64.887025,
+    ],
+  },
+  {
+    label: 'Sao Paulo 1961',
+    lons: [
+      250.071584, 184.414113, 242.417856, 236.66194, 253.475837, 304.419804, 296.569143, 150.542382,
+      222.093689, 160.104261, 141.020061, 332.09156, 300.195587, 205.041886,
+    ],
+  },
+  {
+    label: 'Tokyo 1969',
+    lons: [
+      244.730545, 100.377064, 250.809448, 230.636532, 316.309174, 206.497374, 33.303512, 187.778353,
+      238.672612, 177.083145, 347.530197, 2.502067, 348.307306, 263.187016,
+    ],
+  },
+  {
+    label: 'Delhi 1978',
+    lons: [
+      113.044848, 234.19158, 139.113166, 154.351491, 168.194227, 109.054023, 148.787642, 222.328532,
+      256.011185, 194.028545, 179.209836, 39.388554, 85.397266, 339.811311,
+    ],
+  },
+  {
+    label: 'New York 1996',
+    lons: [
+      90.46474, 150.979555, 70.440065, 74.027487, 66.385492, 284.38479, 6.777086, 303.852323,
+      297.065748, 240.96087, 193.570692, 188.176744, 146.286296, 49.74017,
+    ],
+  },
+  {
+    label: 'Nairobi 2004',
+    lons: [
+      288.354865, 127.116048, 266.789303, 323.395986, 14.248525, 168.858437, 99.071087, 330.430589,
+      311.972891, 260.791221, 48.565854, 289.256603, 343.876621, 256.190619,
+    ],
+  },
+  {
+    label: 'Reykjavik 2011',
+    lons: [
+      216.994808, 271.212348, 235.961103, 236.781827, 144.07377, 35.053953, 202.233879, 1.297278,
+      328.165218, 275.383242, 254.821054, 330.704674, 91.12664, 295.808865,
+    ],
+  },
+  {
+    label: 'Sydney 2018',
+    lons: [
+      17.101258, 272.69528, 7.823224, 38.333251, 281.298784, 231.961891, 279.047308, 27.822189,
+      345.149443, 291.226379, 132.57307, 359.419979, 56.759226, 336.398496,
+    ],
+  },
+];
+
+function referencePoints(lons: readonly number[]): AspectPoint[] {
+  return REFERENCE_POINT_IDS.map((id, index) => at(id, lons[index] ?? 0));
+}
+
+describe('v1 against v2, on ten reference charts', () => {
+  /**
+   * What scripts/measure-scoring-v1.ts measured, pinned so the relationship
+   * cannot drift unnoticed. These assert what IS true, which is narrower than
+   * "the two versions agree": they agree on the set always, on the headline
+   * usually, and on the rest of the ordering rarely.
+   */
+
+  it('produces the identical set of stories under both versions', () => {
+    // Membership is decided by identifyComposites and the orb policy before
+    // any scoring runs, so no weight can add or remove a story. True on all
+    // ten charts, and the reason every other difference here is about order.
+    for (const chart of REFERENCE_CHARTS) {
+      const points = referencePoints(chart.lons);
+      const v1 = identifyStories(points, { scoring: 'v1' }).stories;
+      const v2 = identifyStories(points, { scoring: 'v2' }).stories;
+
+      expect(v1.length, chart.label).toBeGreaterThan(0);
+      expect([...v1.map((story) => story.id)].sort(), chart.label).toEqual(
+        [...v2.map((story) => story.id)].sort(),
+      );
+    }
+  });
+
+  it('agrees on the top story on eight of the ten, and differs on the named two', () => {
+    // Not "always agrees" — that would be the convenient claim. Two charts
+    // genuinely disagree, and they disagree for different reasons:
+    //
+    //   Berlin 1934  v1 leads with a Jupiter-Venus opposition 0.03 degrees
+    //                from exact; v2 leads with a four-body stellium square at
+    //                1.04. v1's aspect table spans 2x (opposition 4, square 2)
+    //                and its flat 600-arcminute falloff docks that square to
+    //                0.80, where v2 spans 1.41x and leaves it at 0.92.
+    //
+    //   Delhi 1978   the relational weight. v2's Midheaven-Uranus trine is
+    //                personal+generational, worth x1.5, against a Chiron-Uranus
+    //                opposition where Chiron has no category at all, worth x1.
+    //                In v1 that same distinction is worth 5 points out of 200
+    //                and the opposition's aspect weight decides it.
+    //
+    // Naming them is what makes a future change legible: a chart entering or
+    // leaving this list is a real shift in the model, not noise.
+    const disagree: string[] = [];
+
+    for (const chart of REFERENCE_CHARTS) {
+      const points = referencePoints(chart.lons);
+      const v1 = identifyStories(points, { scoring: 'v1' }).stories;
+      const v2 = identifyStories(points, { scoring: 'v2' }).stories;
+      if (v1[0]?.id !== v2[0]?.id) disagree.push(chart.label);
+    }
+
+    expect(disagree).toEqual(['Berlin 1934', 'Delhi 1978']);
+  });
+
+  it('never moves a story more than three places between the versions', () => {
+    // The two rankings are close but not the same: 8 of 10 charts reorder
+    // somewhere below the top. Three places is the measured worst case, on
+    // Reykjavik 2011 with twelve stories.
+    let worstShift = 0;
+
+    for (const chart of REFERENCE_CHARTS) {
+      const points = referencePoints(chart.lons);
+      const v1 = identifyStories(points, { scoring: 'v1' }).stories;
+      const v2 = identifyStories(points, { scoring: 'v2' }).stories;
+
+      const positionInV2 = new Map(v2.map((story, index) => [story.id, index]));
+      v1.forEach((story, index) => {
+        const moved = Math.abs((positionInV2.get(story.id) ?? index) - index);
+        if (moved > worstShift) worstShift = moved;
+      });
+    }
+
+    expect(worstShift).toBe(3);
+  });
+
+  it('reaches no conjunction story on any of them', () => {
+    // The empirical half of the unreachability argument in SCORING_V1. The
+    // structural half is that composites occupy disjoint arcs separated by
+    // gaps wider than 10 degrees, and their circular means stay inside those
+    // arcs for any point set this engine builds.
+    for (const chart of REFERENCE_CHARTS) {
+      const { stories } = identifyStories(referencePoints(chart.lons), { scoring: 'v1' });
+      expect(
+        stories.every((story) => story.aspect !== 'conjunction'),
+        chart.label,
+      ).toBe(true);
+    }
+  });
+});
+
 describe('scoring v2, the default', () => {
   it('is what you get without asking', () => {
     const { stories } = identifyStories([at('sun', 0), at('jupiter', 180)]);
