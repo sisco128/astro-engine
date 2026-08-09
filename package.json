@@ -31,6 +31,7 @@
     "@fastify/under-pressure": "^9.1.0",
     "close-with-grace": "^2.5.0",
     "fastify": "^5.11.3",
+    "geo-tz": "^8.1.8",
     "lru-cache": "^11.5.2",
     "sweph": "2.10.3-7",
     "temporal-polyfill": "^1.0.3",

@@ -16,11 +16,15 @@ import { env } from '../config/env.js';
 import { EphemerisError } from '../ephemeris/errors.js';
 import { initEphemeris, report } from '../ephemeris/init.js';
 import { ResultCache } from '../cache/result-cache.js';
+import { GeoError } from '../geo/errors.js';
+import { createNominatimClient, type FetchLike } from '../geo/nominatim.js';
+import { createGeoSearch } from '../geo/search.js';
 import { ComputePool } from '../pool/pool.js';
 import { LocalTimeError } from '../time/local-to-utc.js';
 import { ENGINE_VERSION } from '../version.js';
 import { buildOpenApiDocument } from './openapi.js';
 import { registerChartRoutes } from './routes/v1/charts.js';
+import { registerGeoRoutes } from './routes/v1/geo.js';
 import { registerKeyDateRoutes } from './routes/v1/key-dates.js';
 import { registerReturnRoutes } from './routes/v1/returns.js';
 
@@ -42,6 +46,9 @@ const STATUS_BY_CODE: Readonly<Record<string, number>> = {
   AMBIGUOUS_LOCAL_TIME: 409,
   INVALID_TIME_ZONE: 400,
   WINDOW_TOO_LARGE: 400,
+  // 502, not 503: the engine is fine, a service it depends on is not, and the
+  // distinction tells a caller whether retrying here is worth anything.
+  GEO_UPSTREAM_FAILED: 502,
 };
 
 declare module 'fastify' {
@@ -51,7 +58,18 @@ declare module 'fastify' {
   }
 }
 
-export async function buildApp(): Promise<FastifyInstance> {
+export interface BuildAppOptions {
+  /**
+   * The `fetch` the geocoding client uses. The single seam in this function,
+   * and it earns its place: the alternative is a contract suite that makes
+   * real requests to a public service whose usage policy allows one per
+   * second, which would be both flaky and a violation of the terms the client
+   * exists to honour. Production passes nothing and gets the global.
+   */
+  geoFetch?: FetchLike | undefined;
+}
+
+export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
   const app = Fastify({
     logger: {
       level: env.logLevel,
@@ -80,7 +98,11 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   app.setErrorHandler((error, request, reply) => {
-    if (error instanceof EphemerisError || error instanceof LocalTimeError) {
+    if (
+      error instanceof EphemerisError ||
+      error instanceof LocalTimeError ||
+      error instanceof GeoError
+    ) {
       const status = STATUS_BY_CODE[error.code] ?? 500;
       request.log.warn({ code: error.code, details: error.details }, error.message);
       return reply.status(status).send({
@@ -185,7 +207,13 @@ export async function buildApp(): Promise<FastifyInstance> {
     await pool.close();
   });
 
+  // One geocoding client per app instance, and therefore one outbound queue:
+  // Nominatim's one-request-per-second budget belongs to the source address,
+  // so a client built per request would enforce nothing.
+  const geoSearch = createGeoSearch(createNominatimClient({ fetch: options.geoFetch }));
+
   registerChartRoutes(app);
+  registerGeoRoutes(app, geoSearch);
   registerKeyDateRoutes(app, pool, cache);
   registerReturnRoutes(app, pool, cache);
 
