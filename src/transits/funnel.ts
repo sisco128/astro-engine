@@ -241,6 +241,21 @@ function nest(input: {
  * story. The story is what keeps a chart's aspects from being noise, and
  * replacing it with a same-point rule disables it exactly where it is needed —
  * layering transits on noise makes things worse, not better.
+ *
+ * `stories` is the SCOPE, not merely the input, and that is load-bearing.
+ * Nothing below reads a story except through its own members, so passing a
+ * subset computes exactly the subset — POST /v1/transits/story-windows passes
+ * one story and gets that story's windows, identical to the ones a full run
+ * would have produced for it. Measured on the reference chart over ten years
+ * under funnel.default: all seven stories 9.5 s, a single story 1.4 s at the
+ * median — 6.9x, 86% of the work not done. Verified window-for-window against
+ * the full run for all seven; tests/golden/story-windows.golden.test.ts asserts
+ * the same agreement through the two HTTP routes.
+ *
+ * That is a saving on ONE story and not a way to compute a chart. Seven
+ * single-story runs cost 13.7 s against 9.5 s for one full run, because the
+ * memo below is what makes the full run cheap: stories share members, and a
+ * per-story call cannot share a Mars scan with a call that already did it.
  */
 export function buildFunnel(input: {
   stories: readonly Story[];

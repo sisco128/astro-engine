@@ -32,7 +32,7 @@ import { z } from 'zod';
 
 import { DEFAULT_LIMIT, MAX_LIMIT } from '../geo/search.js';
 import { ENGINE_VERSION } from '../version.js';
-import { KeyDatesRequestSchema } from './schemas/funnel.js';
+import { KeyDatesRequestSchema, StoryWindowsRequestSchema } from './schemas/funnel.js';
 import { GeoSearchResponseSchema, MAX_QUERY_LENGTH } from './schemas/geo.js';
 import { ReturnsRequestSchema } from './schemas/returns.js';
 import { ChartRequestSchema, ChartResponseSchema } from './schemas/v1.js';
@@ -204,7 +204,9 @@ export function buildOpenApiDocument(): Record<string, unknown> {
           summary: 'Funnel vocabulary',
           description:
             'Tiers, presets, aspect identifiers, nesting rules and limits — everything a client ' +
-            'needs to build the `funnel` field of POST /v1/transits/key-dates without guessing.',
+            'needs to build the `funnel` field of POST /v1/transits/key-dates and POST ' +
+            '/v1/transits/story-windows without guessing, including the latter default span and ' +
+            'window ceiling.',
           responses: {
             '200': coarseResponse('The funnel configuration vocabulary.'),
             '401': UNAUTHORIZED,
@@ -333,6 +335,46 @@ export function buildOpenApiDocument(): Record<string, unknown> {
                 'beyond the limit (WINDOW_TOO_LARGE, with the limit in `details`).',
             ),
             '401': UNAUTHORIZED,
+            '409': errorResponse('The wall-clock birth time does not resolve (DST gap or fold).'),
+          },
+        },
+      },
+      '/v1/transits/story-windows': {
+        post: {
+          operationId: 'createStoryWindows',
+          summary: 'The past windows of one story, strongest first',
+          description:
+            'The same funnel as POST /v1/transits/key-dates, scoped to the single natal story ' +
+            'named by `signature` and ordered by descending intensity rather than by date. Built ' +
+            'for the end of onboarding: a client that stored a story in an earlier session holds ' +
+            'its signature — which is stable across sessions and across people, unlike the ' +
+            'per-chart `id` — and asks when that story was last active. `from` and `to` are both ' +
+            'optional and default to the ten years ending today, the shortest span over which ' +
+            'the quietest story on the reference chart still yields three windows. `limit` ' +
+            'defaults to 3. The windows are identical to the ones key-dates returns for the same ' +
+            'story over the same span; scoping the funnel changes the cost, never the answer.',
+          requestBody: jsonBody(jsonSchema(StoryWindowsRequestSchema, 'input')),
+          responses: {
+            // Same reasoning as key-dates: no zod response schema exists, and
+            // writing one purely for documentation would be a second copy of
+            // the truth that nothing keeps honest.
+            '200': coarseResponse(
+              'Chart reference, engine versions, the requested and resolved funnel, the resolved ' +
+                'span, the density of this one story over it, the limit, the story itself with ' +
+                'its signature, and the top windows with their full slow/social/fast paths. ' +
+                'src/http/routes/v1/story-windows.ts is the source of truth for the exact shape.',
+            ),
+            '400': errorResponse(
+              'Malformed request, an unknown funnel preset, `to` not after `from`, or a span ' +
+                'beyond the limit (WINDOW_TOO_LARGE, with the limit in `details`).',
+            ),
+            '401': UNAUTHORIZED,
+            '404': errorResponse(
+              'No story in this chart carries that signature (STORY_NOT_IN_CHART). Not an empty ' +
+                '200: a story that was merely quiet returns 200 with an empty `windows`, and a ' +
+                'client must be able to tell the two apart. `details.signatures` lists every ' +
+                'signature the chart does carry, so a stale one can be recovered from.',
+            ),
             '409': errorResponse('The wall-clock birth time does not resolve (DST gap or fold).'),
           },
         },

@@ -19,7 +19,8 @@ Three things are computed, and they build on each other:
   _stories_ (scored aspect groups), then a date window is scanned for moments
   where a slow, a social and a fast transit all activate the same story at once.
   The output is clustered windows with the full activation path, not a list of
-  every aspect that was technically in orb.
+  every aspect that was technically in orb. The same funnel answers for a single
+  story, by signature and strongest first, at a seventh of the cost.
 - **Planetary returns** — birth-anchored root-finding for the returns and
   half-returns of Saturn, Uranus, Chiron and Pluto (or any other body), each
   labelled with its life phase where the vocabulary has one. Ages are found
@@ -52,19 +53,20 @@ compiler is needed — `sweph` ships prebuilt N-API binaries.
 
 ## Endpoints
 
-| Method | Path                     |                                                                    |
-| ------ | ------------------------ | ------------------------------------------------------------------ |
-| `GET`  | `/v1/health`             | Liveness. No dependencies; answers under load.                     |
-| `GET`  | `/v1/ready`              | Readiness — ephemeris state, library version, probe, pool.         |
-| `GET`  | `/v1/openapi.json`       | The machine-readable contract. See below.                          |
-| `GET`  | `/v1/meta/license`       | Licence and source URL (AGPL-3.0 §13).                             |
-| `GET`  | `/v1/meta/stats`         | Operational counters: cache, pool, uptime.                         |
-| `GET`  | `/v1/meta/funnel`        | Funnel vocabulary: tiers, presets, aspects, nesting rules, limits. |
-| `GET`  | `/v1/meta/life-phases`   | The life-phase catalogue, chart-independent.                       |
-| `GET`  | `/v1/geo/search`         | Place name → coordinates + IANA zone, in one call.                 |
-| `POST` | `/v1/charts`             | Natal chart. Deterministic; carries a strong ETag.                 |
-| `POST` | `/v1/transits/key-dates` | Key dates for a window, with the funnel as request parameters.     |
-| `POST` | `/v1/transits/returns`   | Planetary returns from birth, with life phases.                    |
+| Method | Path                         |                                                                    |
+| ------ | ---------------------------- | ------------------------------------------------------------------ |
+| `GET`  | `/v1/health`                 | Liveness. No dependencies; answers under load.                     |
+| `GET`  | `/v1/ready`                  | Readiness — ephemeris state, library version, probe, pool.         |
+| `GET`  | `/v1/openapi.json`           | The machine-readable contract. See below.                          |
+| `GET`  | `/v1/meta/license`           | Licence and source URL (AGPL-3.0 §13).                             |
+| `GET`  | `/v1/meta/stats`             | Operational counters: cache, pool, uptime.                         |
+| `GET`  | `/v1/meta/funnel`            | Funnel vocabulary: tiers, presets, aspects, nesting rules, limits. |
+| `GET`  | `/v1/meta/life-phases`       | The life-phase catalogue, chart-independent.                       |
+| `GET`  | `/v1/geo/search`             | Place name → coordinates + IANA zone, in one call.                 |
+| `POST` | `/v1/charts`                 | Natal chart. Deterministic; carries a strong ETag.                 |
+| `POST` | `/v1/transits/key-dates`     | Key dates for a window, with the funnel as request parameters.     |
+| `POST` | `/v1/transits/story-windows` | The past windows of one story, by signature, strongest first.      |
+| `POST` | `/v1/transits/returns`       | Planetary returns from birth, with life phases.                    |
 
 Every non-2xx response from every endpoint has the same envelope — branch on
 `error.code`, never on the message:
@@ -121,11 +123,11 @@ separate package — it is served by the engine, generated from the engine, and
 covered by the engine's AGPL, because generating a client from a description of
 an interface links none of this code into the client. And its responses are
 documented honestly: `/v1/charts` carries a full schema because a zod response
-schema exists for it, while key-dates and returns are described in prose,
-because writing zod schemas purely for documentation would create a second copy
-of the truth that nothing keeps equal to the handler. A contract test asserts
-that every registered route appears in the document and that the version it
-advertises is the version a live call returns.
+schema exists for it, while key-dates, story-windows and returns are described
+in prose, because writing zod schemas purely for documentation would create a
+second copy of the truth that nothing keeps equal to the handler. A contract
+test asserts that every registered route appears in the document and that the
+version it advertises is the version a live call returns.
 
 ## Ephemeris data
 

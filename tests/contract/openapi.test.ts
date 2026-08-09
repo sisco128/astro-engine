@@ -31,6 +31,7 @@ const DOCUMENTED_PATHS = [
   '/v1/geo/search',
   '/v1/charts',
   '/v1/transits/key-dates',
+  '/v1/transits/story-windows',
   '/v1/transits/returns',
 ];
 
@@ -244,6 +245,30 @@ describe('request bodies are real JSON Schema, converted from the zod schemas', 
     expect(schema.properties?.['funnel']?.anyOf).toHaveLength(2);
   });
 
+  it('describes the story-windows body, with a required signature and an optional span', () => {
+    const schema = requestSchema('/v1/transits/story-windows');
+
+    // `signature` is the whole point of the endpoint and the only field beyond
+    // the birth moment a caller must supply; `from`, `to` and `limit` all have
+    // server-side defaults and must not be advertised as required.
+    expect((schema.required ?? []).sort()).toEqual(['geo', 'signature', 'when']);
+    expect(Object.keys(schema.properties ?? {}).sort()).toEqual([
+      'from',
+      'funnel',
+      'geo',
+      'houseSystem',
+      'limit',
+      'scoring',
+      'signature',
+      'to',
+      'when',
+    ]);
+    // The same funnel union key-dates offers: a client that can build one can
+    // build the other.
+    expect(schema.properties?.['funnel']?.anyOf).toHaveLength(2);
+    expect(schema.properties?.['limit']?.default).toBe(3);
+  });
+
   it('describes the returns body, and offers neither `from` nor `geo`', () => {
     const schema = requestSchema('/v1/transits/returns');
 
@@ -254,7 +279,12 @@ describe('request bodies are real JSON Schema, converted from the zod schemas', 
   it('embeds no $schema marker inside the request bodies', () => {
     // The document declares its dialect once; a repeated marker inside every
     // embedded schema is noise some generators trip over.
-    for (const path of ['/v1/charts', '/v1/transits/key-dates', '/v1/transits/returns']) {
+    for (const path of [
+      '/v1/charts',
+      '/v1/transits/key-dates',
+      '/v1/transits/story-windows',
+      '/v1/transits/returns',
+    ]) {
       expect(requestSchema(path).$schema).toBeUndefined();
     }
   });
@@ -329,7 +359,11 @@ describe('responses', () => {
   it('describes the responses with no zod schema coarsely rather than inventing one', () => {
     // Deliberate. A parallel zod schema written only for documentation would
     // be a second copy of the truth that nothing keeps equal to the handler.
-    for (const path of ['/v1/transits/key-dates', '/v1/transits/returns']) {
+    for (const path of [
+      '/v1/transits/key-dates',
+      '/v1/transits/story-windows',
+      '/v1/transits/returns',
+    ]) {
       const response = doc.paths[path]?.['post']?.responses['200'];
       const schema = response?.content?.['application/json']?.schema;
 
