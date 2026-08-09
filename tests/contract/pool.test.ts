@@ -80,6 +80,25 @@ describe('the event loop keeps answering', () => {
   }, 120_000);
 });
 
+describe('the second line of defence', () => {
+  /**
+   * @fastify/under-pressure sat in package.json unregistered for the whole of
+   * this project's history — the failure mode of a plugin that is a
+   * dependency and nothing else. These two assertions are what keep it wired.
+   */
+  it('is registered', () => {
+    expect(typeof app.isUnderPressure).toBe('function');
+  });
+
+  it('does not consider a healthy process to be under pressure', () => {
+    // Also a check on the thresholds themselves. An event-loop budget or a
+    // heap ceiling set too low would shed load permanently while looking like
+    // a correctly configured service, and this suite has just run a 15-second
+    // calculation through the pool without tripping it.
+    expect(app.isUnderPressure()).toBe(false);
+  });
+});
+
 describe('bounds and failures', () => {
   it('runs several requests concurrently without interleaving results', async () => {
     // Each worker has its own Swiss Ephemeris state, so concurrent work

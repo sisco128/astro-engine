@@ -105,7 +105,27 @@ export const env = Object.freeze({
   maxBodyBytes: int('MAX_BODY_BYTES', 262_144),
 
   corsOrigins: list('CORS_ORIGINS'),
+
+  /**
+   * Accepted `x-api-key` values. Empty means no authentication at all, which
+   * is the right default in development and a refusal to start in production
+   * — see `authOptional`.
+   */
   apiKeys: list('API_KEYS'),
+
+  /**
+   * The one way to run in production without API keys.
+   *
+   * The trap this exists to prevent is the quiet one: a deploy that forgets a
+   * single variable comes up healthy, passes its readiness probe, and serves
+   * every endpoint to anyone who finds the host — an open API that looks
+   * exactly like a correctly configured one. `API_KEYS` being empty cannot
+   * therefore be allowed to mean "no auth" in production by default; an
+   * operator who genuinely wants that (a private network, a gateway that
+   * authenticates in front) has to say so by name.
+   */
+  authOptional: bool('AUTH_OPTIONAL', false),
+
   rateLimitPerMinute: int('RATE_LIMIT_PER_MINUTE', 60),
 
   /** Served by GET /v1/meta/license to satisfy AGPL-3.0 section 13. */
