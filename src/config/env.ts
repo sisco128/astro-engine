@@ -12,6 +12,7 @@
  * hardcoded three levels up from __dirname and could not be moved.
  */
 
+import { availableParallelism } from 'node:os';
 import { resolve } from 'node:path';
 
 function required(name: string): string {
@@ -68,6 +69,8 @@ function profile(): EphemerisProfile {
   return value as EphemerisProfile;
 }
 
+const defaultPoolSize = Math.max(1, Math.min(availableParallelism() - 1, 4));
+
 export const env = Object.freeze({
   nodeEnv: optional('NODE_ENV', 'development'),
   isProduction: optional('NODE_ENV', 'development') === 'production',
@@ -79,6 +82,14 @@ export const env = Object.freeze({
   ephemerisProfile: profile(),
   strictEphemeris: bool('SE_STRICT_EPHEMERIS', true),
   forbidFallback: bool('SE_FORBID_FALLBACK', true),
+
+  /**
+   * Compute workers. Defaults to one fewer than the machine has, capped at 4:
+   * the work is CPU-bound, so more workers than cores only adds contention,
+   * and one core is left for the event loop to keep answering health checks.
+   */
+  poolSize: int('POOL_SIZE', 0) || defaultPoolSize,
+  poolTaskTimeoutMs: int('POOL_TASK_TIMEOUT_MS', 60_000),
 
   requestTimeoutMs: int('REQUEST_TIMEOUT_MS', 30_000),
   maxBodyBytes: int('MAX_BODY_BYTES', 262_144),

@@ -47,7 +47,12 @@ let app: FastifyInstance;
 beforeAll(async () => {
   app = await buildApp();
   await app.ready();
-});
+  // Readiness now includes the compute pool, whose workers start
+  // asynchronously. Waiting here rather than loosening the assertion: a 503
+  // before a worker exists is the right answer, and the test should observe
+  // the steady state.
+  await app.pool.whenReady();
+}, 60_000);
 
 afterAll(async () => {
   await app.close();

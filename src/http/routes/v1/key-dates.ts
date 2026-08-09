@@ -13,7 +13,8 @@ import {
   type JulianDayUT,
 } from '../../../ephemeris/swe.js';
 import { resolveLocalTime } from '../../../time/local-to-utc.js';
-import { buildFunnel } from '../../../transits/funnel.js';
+import type { ComputePool } from '../../../pool/pool.js';
+import type { FunnelResult } from '../../../transits/funnel.js';
 import {
   funnelMetadata,
   KeyDatesRequestSchema,
@@ -34,10 +35,10 @@ function jdToIso(jd: number): string {
   return new Date((jd - 2440587.5) * 86_400_000).toISOString();
 }
 
-export function registerKeyDateRoutes(app: FastifyInstance): void {
+export function registerKeyDateRoutes(app: FastifyInstance, pool: ComputePool): void {
   app.get('/v1/meta/funnel', () => funnelMetadata());
 
-  app.post('/v1/transits/key-dates', (request, reply) => {
+  app.post('/v1/transits/key-dates', async (request, reply) => {
     assertReady();
 
     const parsed = KeyDatesRequestSchema.safeParse(request.body);
@@ -131,7 +132,10 @@ export function registerKeyDateRoutes(app: FastifyInstance): void {
 
     const { stories } = identifyStories(natalPoints, { scoring: input.scoring });
 
-    const funnel = buildFunnel({
+    // Off the event loop and into a worker process. The whole point is that
+    // /v1/health keeps answering while this runs.
+    const funnel = await pool.run<FunnelResult>({
+      kind: 'funnel',
       stories,
       natalPoints,
       fromJd,

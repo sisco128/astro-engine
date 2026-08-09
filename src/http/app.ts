@@ -15,6 +15,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { env } from '../config/env.js';
 import { EphemerisError } from '../ephemeris/errors.js';
 import { initEphemeris, report } from '../ephemeris/init.js';
+import { ComputePool } from '../pool/pool.js';
 import { LocalTimeError } from '../time/local-to-utc.js';
 import { registerChartRoutes } from './routes/v1/charts.js';
 import { registerKeyDateRoutes } from './routes/v1/key-dates.js';
@@ -27,6 +28,9 @@ const STATUS_BY_CODE: Readonly<Record<string, number>> = {
   EPHEMERIS_UNAVAILABLE: 503,
   EPHEMERIS_FALLBACK: 500,
   EPHEMERIS_CALC_FAILED: 500,
+  COMPUTE_OVERLOADED: 503,
+  COMPUTE_UNAVAILABLE: 503,
+  COMPUTE_WORKER_LOST: 504,
   HOUSE_SYSTEM_UNDEFINED_AT_LATITUDE: 422,
   // 409, not 400: the request is well-formed, but that wall-clock time is
   // genuinely unresolvable without a decision only the caller can make.
@@ -35,6 +39,12 @@ const STATUS_BY_CODE: Readonly<Record<string, number>> = {
   INVALID_TIME_ZONE: 400,
   WINDOW_TOO_LARGE: 400,
 };
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    pool: ComputePool;
+  }
+}
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -118,7 +128,13 @@ export async function buildApp(): Promise<FastifyInstance> {
   // be: it reports whether calculations can actually succeed.
   app.get('/v1/ready', (_request, reply) => {
     const state = report();
-    return reply.status(state.state === 'ready' ? 200 : 503).send(state);
+    // The pool is part of readiness: an ephemeris that loads but no worker to
+    // compute in means calculation requests will fail.
+    const ok = state.state === 'ready' && pool.ready;
+    return reply.status(ok ? 200 : 503).send({
+      ...state,
+      pool: { ready: pool.ready, queueDepth: pool.depth },
+    });
   });
 
   /**
@@ -142,8 +158,17 @@ export async function buildApp(): Promise<FastifyInstance> {
     ],
   }));
 
+  // One pool per app instance, closed with it. Every Swiss Ephemeris call is
+  // synchronous C, so without this a single key-dates request would block the
+  // event loop for its whole duration and /v1/health would queue behind it.
+  const pool = new ComputePool();
+  app.decorate('pool', pool);
+  app.addHook('onClose', async () => {
+    await pool.close();
+  });
+
   registerChartRoutes(app);
-  registerKeyDateRoutes(app);
+  registerKeyDateRoutes(app, pool);
 
   initEphemeris();
 
