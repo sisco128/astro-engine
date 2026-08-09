@@ -18,6 +18,8 @@ import { initEphemeris, report } from '../ephemeris/init.js';
 import { ResultCache } from '../cache/result-cache.js';
 import { ComputePool } from '../pool/pool.js';
 import { LocalTimeError } from '../time/local-to-utc.js';
+import { ENGINE_VERSION } from '../version.js';
+import { buildOpenApiDocument } from './openapi.js';
 import { registerChartRoutes } from './routes/v1/charts.js';
 import { registerKeyDateRoutes } from './routes/v1/key-dates.js';
 import { registerReturnRoutes } from './routes/v1/returns.js';
@@ -41,9 +43,6 @@ const STATUS_BY_CODE: Readonly<Record<string, number>> = {
   INVALID_TIME_ZONE: 400,
   WINDOW_TOO_LARGE: 400,
 };
-
-/** Kept in one place: the version stamped on responses and on cache keys. */
-const ENGINE_VERSION = '0.1.0';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -142,6 +141,16 @@ export async function buildApp(): Promise<FastifyInstance> {
       pool: { ready: pool.ready, queueDepth: pool.depth },
     });
   });
+
+  /**
+   * The machine-readable contract, generated from the same zod schemas that
+   * validate requests. Frontends generate typed clients from this instead of
+   * hand-mirroring types, which is what the prototype's client/src/types/api.ts
+   * was and how it went stale. Built once per app instance: the document is a
+   * pure function of code that cannot change while the process runs.
+   */
+  const openApiDocument = buildOpenApiDocument();
+  app.get('/v1/openapi.json', () => openApiDocument);
 
   /**
    * AGPL-3.0 section 13 requires offering the Corresponding Source to users

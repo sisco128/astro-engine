@@ -4,13 +4,12 @@ import { lifePhaseCatalogue } from '../../../domain/life-phases.js';
 import { assertReady } from '../../../ephemeris/init.js';
 import { bodyState, jdFromUtc, seVersion, type JulianDayUT } from '../../../ephemeris/swe.js';
 import { resolveLocalTime } from '../../../time/local-to-utc.js';
+import { ENGINE_VERSION } from '../../../version.js';
 import type { BodyId } from '../../../ephemeris/bodies.js';
 import type { ResultCache } from '../../../cache/result-cache.js';
 import type { ComputePool } from '../../../pool/pool.js';
 import type { PlanetaryReturn } from '../../../transits/returns.js';
 import { ReturnsRequestSchema } from '../../schemas/returns.js';
-
-const ENGINE_VERSION = '0.1.0';
 
 /** Julian Day back to an ISO instant, for the response. */
 function jdToIso(jd: number): string {

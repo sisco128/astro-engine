@@ -4,9 +4,8 @@ import { calculateChart } from '../../../domain/chart.js';
 import { assertReady } from '../../../ephemeris/init.js';
 import { seVersion, type HouseSystem } from '../../../ephemeris/swe.js';
 import { resolveLocalTime } from '../../../time/local-to-utc.js';
+import { ENGINE_VERSION } from '../../../version.js';
 import { ChartRequestSchema } from '../../schemas/v1.js';
-
-const ENGINE_VERSION = '0.1.0';
 
 export function registerChartRoutes(app: FastifyInstance): void {
   app.post('/v1/charts', (request, reply) => {
