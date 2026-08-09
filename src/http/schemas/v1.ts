@@ -1,11 +1,13 @@
 /**
  * Request and response schemas for /v1.
  *
- * One zod definition per shape, used for runtime validation and as the source
- * of the TypeScript types. These move to `packages/contract` in phase 6, where
- * they also generate the OpenAPI document and are published for the frontend
- * repositories to depend on — replacing the hand-mirrored, unversioned
- * `client/src/types/api.ts` the prototype required every consumer to maintain.
+ * One zod definition per shape, doing three jobs at once: runtime validation,
+ * the source of the TypeScript types, and — via `z.toJSONSchema` in
+ * src/http/openapi.ts — the source of the published contract. That third job
+ * is the point. A frontend generates its client from GET /v1/openapi.json, so
+ * the thing it types itself against is the same object that rejects its
+ * malformed requests, and the hand-mirrored `client/src/types/api.ts` the
+ * prototype made every consumer maintain has nothing left to be wrong about.
  */
 
 import { z } from 'zod';

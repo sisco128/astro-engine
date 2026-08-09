@@ -13,6 +13,7 @@ import {
   type JulianDayUT,
 } from '../../../ephemeris/swe.js';
 import { resolveLocalTime } from '../../../time/local-to-utc.js';
+import { ENGINE_VERSION } from '../../../version.js';
 import type { ResultCache } from '../../../cache/result-cache.js';
 import type { ComputePool } from '../../../pool/pool.js';
 import type { FunnelResult } from '../../../transits/funnel.js';
@@ -22,8 +23,6 @@ import {
   MAX_WINDOW_DAYS,
   resolveFunnel,
 } from '../../schemas/funnel.js';
-
-const ENGINE_VERSION = '0.1.0';
 
 /** ISO date to Julian Day, midnight UT. */
 function isoToJd(iso: string): JulianDayUT {
