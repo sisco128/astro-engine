@@ -3,7 +3,7 @@
   "seVersion": "2.10.03",
   "source": "https://github.com/aloistr/swisseph/raw/master/ephe/",
   "seededFrom": "infra-test-2/ephem (Astrodienst build dated 2023-09-20)",
-  "seededAt": "2026-08-08",
+  "seededAt": "2026-08-09",
   "families": {
     "sepl": {
       "body": "planets",
@@ -31,6 +31,20 @@
         "sepl_18.se1",
         "semo_18.se1",
         "seas_18.se1"
+      ]
+    },
+    "bounds": {
+      "description": "Core plus the edges of the measured coverage. What CI installs: small enough to download on every run, complete enough to verify the published bounds.",
+      "files": [
+        "sepl_18.se1",
+        "semo_18.se1",
+        "seas_18.se1",
+        "seplm132.se1",
+        "semom132.se1",
+        "sepl_162.se1",
+        "semo_162.se1",
+        "seplm24.se1",
+        "semom24.se1"
       ]
     },
     "full": {

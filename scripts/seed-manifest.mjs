@@ -42,6 +42,34 @@ const FAMILIES = {
 /** The three files that cover every realistic natal chart, 1800-2399 CE. */
 const CORE_FILES = ['sepl_18.se1', 'semo_18.se1', 'seas_18.se1'];
 
+/**
+ * Core, plus the files the coverage assertions actually touch.
+ *
+ * Those tests probe the measured floor and ceiling of the installed data —
+ * the numbers `measuredCoverage` publishes — and the nominal-but-unavailable
+ * window between them. Under `core` they cannot run at all, which on CI meant
+ * the one suite that verifies the manifest's central claim was the one suite
+ * that could not check it.
+ *
+ * The planetary file is not enough on its own: Swiss Ephemeris reaches the
+ * Sun through the Earth-Moon barycentre, so each edge needs its `semo`
+ * sibling too. Determined by running the suite against a directory built up
+ * file by file, not by reading the naming scheme.
+ */
+const BOUNDS_FILES = [
+  ...CORE_FILES,
+  // The measured floor, -12999.
+  'seplm132.se1',
+  'semom132.se1',
+  // The measured ceiling, 16799.
+  'sepl_162.se1',
+  'semo_162.se1',
+  // Around JD 1000000, where Chiron is undefined but the Sun must still
+  // compute — the test that proves that rejection is about the body.
+  'seplm24.se1',
+  'semom24.se1',
+];
+
 function sha256(path) {
   return new Promise((resolve, reject) => {
     const hash = createHash('sha256');
@@ -98,10 +126,12 @@ files.sort(
     a.family.localeCompare(b.family) || a.startYear - b.startYear || a.name.localeCompare(b.name),
 );
 
-const missingFromCore = CORE_FILES.filter((name) => !files.some((f) => f.name === name));
-if (missingFromCore.length > 0) {
+const missingFromProfiles = [...new Set([...CORE_FILES, ...BOUNDS_FILES])].filter(
+  (name) => !files.some((f) => f.name === name),
+);
+if (missingFromProfiles.length > 0) {
   console.error(
-    `refusing to write manifest: core files missing from source dir: ${missingFromCore.join(', ')}`,
+    `refusing to write manifest: profile files missing from source dir: ${missingFromProfiles.join(', ')}`,
   );
   process.exit(1);
 }
@@ -200,6 +230,12 @@ const manifest = {
       description: '1800-2399 CE. Covers every realistic natal chart. Fast local-dev option.',
       files: CORE_FILES,
     },
+    bounds: {
+      description:
+        'Core plus the edges of the measured coverage. What CI installs: small enough to ' +
+        'download on every run, complete enough to verify the published bounds.',
+      files: BOUNDS_FILES,
+    },
     full: {
       description:
         'Maximum freely available coverage. Default. See measuredCoverage for the real bounds — ' +
@@ -214,10 +250,14 @@ await writeFile('ephemeris.manifest.json', `${JSON.stringify(manifest, null, 2)}
 
 const mb = (bytes) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 const coreBytes = files.filter((f) => CORE_FILES.includes(f.name)).reduce((s, f) => s + f.bytes, 0);
+const boundsBytes = files
+  .filter((f) => BOUNDS_FILES.includes(f.name))
+  .reduce((s, f) => s + f.bytes, 0);
 
 console.log(`wrote ephemeris.manifest.json`);
 console.log(`  files:   ${files.length}`);
 console.log(`  core:    ${CORE_FILES.length} files, ${mb(coreBytes)}`);
+console.log(`  bounds:  ${BOUNDS_FILES.length} files, ${mb(boundsBytes)}`);
 console.log(`  full:    ${files.length} files, ${mb(totalBytes)}`);
 console.log(
   `  nominale (dai nomi file): ${Math.abs(Math.min(...years))} BCE -> ${Math.max(...years) + 599} CE`,

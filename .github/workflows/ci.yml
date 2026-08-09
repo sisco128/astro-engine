@@ -10,7 +10,10 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  EPHEMERIS_PROFILE: core # 1.9 MB. The golden suite's charts all sit in 1800-2399 CE.
+  # 7.2 MB: 1800-2399 CE for the charts, plus the edges of the measured
+  # coverage. `core` was cheaper but left the coverage suite unable to reach
+  # the bounds it exists to verify — the manifest's central claim, unchecked.
+  EPHEMERIS_PROFILE: bounds
   # Job-wide on purpose. Attached to a single step, it silently missed
   # `pnpm test`, whose contract suite then fell back to a developer's home
   # directory, found nothing, and let Swiss Ephemeris drop to the Moshier
