@@ -8,9 +8,11 @@
  * reason the funnel filters at all: layering transits on raw aspects would
  * stack structure on noise.
  *
- * The scoring is ported from themes.js with every number unchanged. Two of
- * those numbers look like accidents and are flagged in SCORING_V1; they stay
- * as written, because altering them silently re-ranks every chart ever scored.
+ * The scoring is ported from themes.js with every number unchanged. Three of
+ * those numbers looked like accidents; scripts/measure-scoring-v1.ts settled
+ * what each one costs and SCORING_V1 records the figures. They stay as written
+ * — two of the three would re-rank charts if changed, and v1's job is to
+ * reproduce the old numbers.
  *
  * The score orders stories. It does NOT decide which transits count — in the
  * prototype `finalScore` was computed at themes.js:368 and read only by the
@@ -103,9 +105,9 @@ function compositeMultiplier(body: CompositeBody, weights: ScoringWeights): numb
  *   falloff  = (1 - orbMinutes / 600) ^ 2
  *   score    = (base + relationalBonus) * falloff * multiplierA * multiplierB
  *
- * Note `+ relationalBonus` and not `*`. On a base of 200-500 the largest bonus
- * moves the result by about one percent, where every other factor multiplies.
- * See SCORING_V1.
+ * Note `+ relationalBonus` and not `*`. Measured over ten charts, removing the
+ * bonus entirely changes no ranking at all; its ceiling is 2.44% of a score.
+ * See SCORING_V1 for what multiplying it instead would cost.
  */
 function scoreStory(input: {
   aspect: AspectId;
