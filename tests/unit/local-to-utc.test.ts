@@ -173,6 +173,57 @@ describe('fall back — the time happened twice', () => {
   });
 });
 
+describe('the lenient mode, for a time the engine invented', () => {
+  /**
+   * `disambiguation: 'compatible'` exists for one caller: the assumed 03:00 of
+   * an unknown birth time. Rejecting there would ask the caller to resolve a
+   * 60-minute ambiguity inside a 24-hour one the response has already
+   * declared, and they have nothing to answer with — the hour is not theirs.
+   * A real birth time keeps the strict behaviour, which the suites above hold
+   * in place.
+   */
+
+  it('resolves a gap forward instead of throwing', () => {
+    const resolved = resolveLocalTime(
+      { year: 2024, month: 3, day: 10, hour: 2, minute: 30, zone: 'America/New_York' },
+      { disambiguation: 'compatible' },
+    );
+
+    // The clock jumped 02:00 to 03:00, so Temporal's compatible rule pushes
+    // the wall time forward by the shift: 03:30 EDT, which is 07:30 UT.
+    expect(resolved.offset).toBe('-04:00');
+    expect(resolved.utc).toBe('2024-03-10T07:30:00Z');
+  });
+
+  it('takes the earlier of a fold instead of returning both', () => {
+    const resolved = resolveLocalTime(
+      { year: 1978, month: 10, day: 29, hour: 1, minute: 30, zone: 'America/New_York' },
+      { disambiguation: 'compatible' },
+    );
+
+    // The first 01:30, still on daylight time.
+    expect(resolved.offset).toBe('-04:00');
+    expect(resolved.utc).toBe('1978-10-29T05:30:00Z');
+  });
+
+  it('changes nothing on an ordinary night', () => {
+    const strict = resolveLocalTime({
+      year: 1987,
+      month: 8,
+      day: 12,
+      hour: 3,
+      minute: 0,
+      zone: 'Europe/Rome',
+    });
+    const lenient = resolveLocalTime(
+      { year: 1987, month: 8, day: 12, hour: 3, minute: 0, zone: 'Europe/Rome' },
+      { disambiguation: 'compatible' },
+    );
+
+    expect(lenient).toEqual(strict);
+  });
+});
+
 describe('invalid input', () => {
   it('rejects an unknown time zone', () => {
     try {

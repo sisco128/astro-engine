@@ -38,6 +38,7 @@ interface ReturnEvent {
 interface ReturnsBody {
   engine: { version: string; se: string };
   birth: { utc: string; jdUt: number };
+  birthTime?: { assumed: true; assumedLocal: { hour: number; zone: string }; basis: string };
   horizonYears: number;
   events: ReturnEvent[];
 }
@@ -123,6 +124,33 @@ describe('POST /v1/transits/returns', () => {
     expect(jupiterReturn?.phase).toBeNull();
     expect(jupiterReturn?.ageYears).toBeGreaterThan(11);
     expect(jupiterReturn?.ageYears).toBeLessThan(13);
+  });
+
+  it('declares an assumed birth hour here too, rather than applying it quietly', async () => {
+    // Returns share the `when` union with the other endpoints, so the
+    // date-only variant is accepted here as well. The events barely move —
+    // Jupiter, the fastest body on offer, drifts 0.08 degrees across the
+    // 24-hour uncertainty — but an endpoint that takes the variant and says
+    // nothing about it is the silent noon wearing a different hat.
+    const { statusCode, body } = await postReturns({
+      when: { localDate: { year: 1987, month: 8, day: 12, zone: 'Europe/Rome' } },
+      bodies: ['jupiter'],
+      horizonYears: 15,
+    });
+
+    expect(statusCode).toBe(200);
+    // 03:00 CEST is 01:00 UT. Asserted to the minute: `birth.utc` is rendered
+    // back out of a Julian Day, which is a float, and the round trip lands
+    // half a second either side.
+    expect(body.birth.utc).toMatch(/^1987-08-12T00:59:|^1987-08-12T01:00:/);
+    expect(body.birthTime?.assumed).toBe(true);
+    expect(body.birthTime?.assumedLocal.hour).toBe(3);
+    expect(body.birthTime?.basis).toBe('spontaneous-birth-peak');
+  });
+
+  it('carries nothing extra when the birth time is known', async () => {
+    const { body } = await postReturns(ROME_1987);
+    expect(body.birthTime).toBeUndefined();
   });
 
   it('rejects the Moon, excluded from transits for measured reasons', async () => {

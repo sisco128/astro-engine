@@ -32,6 +32,8 @@ import {
 export interface Story {
   /** Stable identifier: the two composite sides, sorted. */
   readonly id: string;
+  /** The configuration itself, comparable across charts. See `storySignature`. */
+  readonly signature: string;
   readonly a: CompositeBody;
   readonly b: CompositeBody;
   readonly aspect: AspectId;
@@ -211,6 +213,59 @@ function scored(input: {
 }
 
 /**
+ * The configuration as a canonical string: `square:moon+trueNode|chiron`.
+ *
+ * `id` names a story inside one response — it is what `keyDates[].storyId`
+ * points at, and it is only meaningful next to the chart that produced it. A
+ * signature names the CONFIGURATION, so two people whose charts both carry
+ * Moon conjunct true Node square Chiron get the same string. Naming lives
+ * outside the engine, on a lookup service or a model keyed on this value; the
+ * engine emits the key and interprets nothing.
+ *
+ * Canonical by construction, and independent of everything that is not the
+ * configuration: longitudes, orbs, chart identity, and the order the
+ * composites happened to be built in. Members are sorted inside a side, and
+ * the two sides are ordered against each other so that a square between X and
+ * Y is one string rather than two.
+ *
+ * Ordering is by UTF-16 code unit — `Array.prototype.sort`'s default and the
+ * `<` operator's — deliberately not `localeCompare`, whose result depends on
+ * the ICU data the runtime was built with. This string crosses process and
+ * machine boundaries, and a signature that sorts differently on two hosts is
+ * not an identifier.
+ *
+ * Member ids are carried verbatim rather than lowercased: they are the same
+ * identifiers `members` and the body catalogue use, and folding the case of
+ * `trueNode` would break the mapping back to them for no gain.
+ */
+export function storySignature(
+  aspect: AspectId,
+  membersA: readonly string[],
+  membersB: readonly string[],
+): string {
+  const sideA = [...membersA].sort().join('+');
+  const sideB = [...membersB].sort().join('+');
+  return sideA <= sideB ? `${aspect}:${sideA}|${sideB}` : `${aspect}:${sideB}|${sideA}`;
+}
+
+/**
+ * The natal points an unknown birth hour actually invalidates.
+ *
+ * The Moon moves about 0.5 degrees an hour, so a 24-hour uncertainty is ±6
+ * degrees — wider than any orb that forms a story (6 to 8 degrees under
+ * natal.v1). The Ascendant and Midheaven are functions of sidereal time and
+ * turn a full circle across the day, so an assumed hour says nothing about
+ * them whatsoever. Every other body moves too slowly for the day to matter:
+ * the Sun covers 1 degree, Mercury at its fastest 2.3.
+ */
+export const TIME_SENSITIVE_MEMBERS = ['moon', 'ascendant', 'midheaven'] as const;
+
+/** Whether an unknown birth hour puts this story's geometry in question. */
+export function isTimeSensitive(members: readonly string[]): boolean {
+  return members.some((member) => (TIME_SENSITIVE_MEMBERS as readonly string[]).includes(member));
+}
+
+/**
  * Ascendant and Midheaven are geometrically bound and always in aspect, so a
  * "story" between them alone is an artefact of the coordinate system rather
  * than a feature of the chart. themes.js:315 excluded the same pair.
@@ -255,6 +310,7 @@ export function identifyStories(
 
       stories.push({
         id: `${a.members.join('+')}|${aspect.aspect}|${b.members.join('+')}`,
+        signature: storySignature(aspect.aspect, a.members, b.members),
         a,
         b,
         aspect: aspect.aspect,

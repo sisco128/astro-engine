@@ -3,13 +3,13 @@ import type { FastifyInstance } from 'fastify';
 import { lifePhaseCatalogue } from '../../../domain/life-phases.js';
 import { assertReady } from '../../../ephemeris/init.js';
 import { bodyState, jdFromUtc, seVersion, type JulianDayUT } from '../../../ephemeris/swe.js';
-import { resolveLocalTime } from '../../../time/local-to-utc.js';
 import { ENGINE_VERSION } from '../../../version.js';
 import type { BodyId } from '../../../ephemeris/bodies.js';
 import type { ResultCache } from '../../../cache/result-cache.js';
 import type { ComputePool } from '../../../pool/pool.js';
 import type { PlanetaryReturn } from '../../../transits/returns.js';
 import { ReturnsRequestSchema } from '../../schemas/returns.js';
+import { resolveWhen } from '../../schemas/when.js';
 
 /** Julian Day back to an ISO instant, for the response. */
 function jdToIso(jd: number): string {
@@ -45,20 +45,14 @@ export function registerReturnRoutes(
 
     const input = parsed.data;
 
-    const utc =
-      'utc' in input.when
-        ? input.when.utc
-        : (() => {
-            const r = resolveLocalTime(input.when.local);
-            return {
-              year: r.year,
-              month: r.month,
-              day: r.day,
-              hour: r.hour,
-              minute: r.minute,
-              second: r.second,
-            };
-          })();
+    // Returns share the `when` union with the other two endpoints, so they
+    // accept an unknown birth time too. The events barely move — a return is a
+    // slow body meeting its own natal longitude, and the fastest of them,
+    // Jupiter, drifts 0.08 degrees across the 24-hour uncertainty — but the
+    // assumption is declared here as well rather than applied quietly. An
+    // endpoint that accepts the variant and says nothing about it is the
+    // silent noon in a different costume.
+    const { utc, birthTime } = resolveWhen(input.when);
 
     const birthJd = jdFromUtc(utc);
     const toJd = (birthJd + input.horizonYears * 365.25) as JulianDayUT;
@@ -95,6 +89,7 @@ export function registerReturnRoutes(
     return reply.header('X-Cache', cacheHit ? 'hit' : 'miss').send({
       engine: { version: ENGINE_VERSION, se: seVersion() },
       birth: { utc: jdToIso(birthJd), jdUt: birthJd },
+      ...(birthTime !== undefined ? { birthTime } : {}),
       horizonYears: input.horizonYears,
       events: events.map((event) => ({
         body: event.body,

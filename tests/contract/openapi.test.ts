@@ -152,16 +152,30 @@ describe('request bodies are real JSON Schema, converted from the zod schemas', 
     ]);
 
     // The union is the part a generator most needs and the part a
-    // hand-written type most often gets wrong: a birth moment is either a UTC
-    // instant or a local wall-clock time with its zone, never a merge of both.
+    // hand-written type most often gets wrong: a birth moment is a UTC instant,
+    // or a local wall-clock time with its zone, or a date whose hour nobody
+    // knows — never a merge of them.
     const when = schema.properties?.['when'];
-    expect(when?.anyOf).toHaveLength(2);
+    expect(when?.anyOf).toHaveLength(3);
 
     const branches = (when?.anyOf ?? []).map((branch) => Object.keys(branch.properties ?? {}));
-    expect(branches.sort()).toEqual([['local'], ['utc']]);
+    expect(branches.sort()).toEqual([['local'], ['localDate'], ['utc']]);
 
     const local = when?.anyOf?.find((branch) => branch.properties?.['local'] !== undefined);
     expect(Object.keys(local?.properties?.['local']?.properties ?? {})).toContain('zone');
+  });
+
+  it('shows that the localDate branch carries a zone but no hour', () => {
+    // The absence of `hour` is the whole point of that branch. A client that
+    // cannot see it in the contract will invent a noon of its own, which is
+    // exactly the silent assumption the engine exists to replace with a
+    // declared one.
+    const when = requestSchema('/v1/charts').properties?.['when'];
+    const localDate = when?.anyOf?.find((branch) => branch.properties?.['localDate'] !== undefined);
+    const fields = Object.keys(localDate?.properties?.['localDate']?.properties ?? {});
+
+    expect(fields).toContain('zone');
+    expect(fields).not.toContain('hour');
   });
 
   it('leaves fields with a zod default optional on the wire', () => {
@@ -203,6 +217,9 @@ describe('responses', () => {
 
     expect(Object.keys(schema?.properties ?? {}).sort()).toEqual([
       'angles',
+      // Present only when the hour was assumed, and the reason the houses
+      // below can be trusted or not — a client must see it in the contract.
+      'birthTime',
       'bodies',
       'chartRef',
       'engine',

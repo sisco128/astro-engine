@@ -16,7 +16,7 @@ import { z } from 'zod';
 import { LIFE_PHASE_BODIES } from '../../domain/life-phases.js';
 import { BODY_IDS } from '../../ephemeris/bodies.js';
 import { EXCLUDED_BODIES } from '../../domain/timescales.js';
-import { WhenSchema } from './v1.js';
+import { WhenSchema } from './when.js';
 
 /**
  * The horizon is bounded in years-of-life, not window days: the scan is

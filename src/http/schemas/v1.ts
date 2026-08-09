@@ -14,45 +14,12 @@ import { z } from 'zod';
 
 import { BODY_IDS, DEFAULT_BODIES } from '../../ephemeris/bodies.js';
 import { HOUSE_SYSTEMS } from '../../ephemeris/swe.js';
+import { BirthTimeAssumptionSchema, WhenSchema } from './when.js';
 
 const houseSystemLetters = Object.keys(HOUSE_SYSTEMS) as [string, ...string[]];
 
 export const BodyIdSchema = z.enum(BODY_IDS);
 export const HouseSystemSchema = z.enum(houseSystemLetters);
-
-/**
- * Birth moment, given either as a UTC instant or as a local wall-clock time
- * with its IANA zone.
- *
- * Offering both matters: a client that already knows the UTC instant should
- * not be forced through a zone lookup, and a client that only has "11:32 in
- * Rome" must not be left to do the conversion itself — that is precisely the
- * conversion the prototype got wrong.
- */
-export const WhenSchema = z.union([
-  z.object({
-    utc: z.object({
-      year: z.number().int().min(-12000).max(16000),
-      month: z.number().int().min(1).max(12),
-      day: z.number().int().min(1).max(31),
-      hour: z.number().int().min(0).max(23),
-      minute: z.number().int().min(0).max(59),
-      second: z.number().int().min(0).max(60).optional(),
-    }),
-  }),
-  z.object({
-    local: z.object({
-      year: z.number().int().min(-12000).max(16000),
-      month: z.number().int().min(1).max(12),
-      day: z.number().int().min(1).max(31),
-      hour: z.number().int().min(0).max(23),
-      minute: z.number().int().min(0).max(59),
-      second: z.number().int().min(0).max(60).optional(),
-      /** IANA identifier, e.g. "Europe/Rome". */
-      zone: z.string().min(1),
-    }),
-  }),
-]);
 
 export const ChartRequestSchema = z
   .object({
@@ -114,6 +81,13 @@ export const ChartResponseSchema = z.object({
     system: HouseSystemSchema,
     cusps: z.array(z.number()).length(12),
   }),
+  /**
+   * Present only for the `localDate` variant of `when`. The houses and angles
+   * above are computed at the assumed hour and returned rather than
+   * suppressed — an Ascendant nobody can check is still the best available
+   * estimate — and this block is what stops them being read as measured.
+   */
+  birthTime: BirthTimeAssumptionSchema.optional(),
 });
 
 export type ChartResponse = z.infer<typeof ChartResponseSchema>;
