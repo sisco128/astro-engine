@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 
 import { calculateChart } from '../../../domain/chart.js';
-import { identifyStories } from '../../../domain/themes.js';
+import { identifyStories, isTimeSensitive } from '../../../domain/themes.js';
 import type { FunnelConfig } from '../../../domain/timescales.js';
 import { DEFAULT_BODIES } from '../../../ephemeris/bodies.js';
 import { EphemerisError } from '../../../ephemeris/errors.js';
@@ -12,7 +12,6 @@ import {
   type HouseSystem,
   type JulianDayUT,
 } from '../../../ephemeris/swe.js';
-import { resolveLocalTime } from '../../../time/local-to-utc.js';
 import type { ResultCache } from '../../../cache/result-cache.js';
 import type { ComputePool } from '../../../pool/pool.js';
 import type { FunnelResult } from '../../../transits/funnel.js';
@@ -22,6 +21,7 @@ import {
   MAX_WINDOW_DAYS,
   resolveFunnel,
 } from '../../schemas/funnel.js';
+import { resolveWhen } from '../../schemas/when.js';
 
 const ENGINE_VERSION = '0.1.0';
 
@@ -60,20 +60,7 @@ export function registerKeyDateRoutes(
 
     const input = parsed.data;
 
-    const utc =
-      'utc' in input.when
-        ? input.when.utc
-        : (() => {
-            const r = resolveLocalTime(input.when.local);
-            return {
-              year: r.year,
-              month: r.month,
-              day: r.day,
-              hour: r.hour,
-              minute: r.minute,
-              second: r.second,
-            };
-          })();
+    const { utc, birthTime } = resolveWhen(input.when);
 
     const fromJd = isoToJd(input.from);
     const toJd = isoToJd(input.to);
@@ -127,6 +114,7 @@ export function registerKeyDateRoutes(
       geo: input.geo,
       houseSystem: input.houseSystem as HouseSystem,
       bodies: DEFAULT_BODIES,
+      ...(birthTime !== undefined ? { birthTimeAssumed: true } : {}),
     });
 
     const natalPoints = [
@@ -168,6 +156,10 @@ export function registerKeyDateRoutes(
     return reply.header('X-Cache', cacheHit ? 'hit' : 'miss').send({
       chartRef: chart.chartRef,
       engine: { version: ENGINE_VERSION, se: seVersion() },
+      // Only when the hour was assumed. Absent, not `assumed: false`, so a
+      // request carrying a real birth time gets the response it got before
+      // unknown times existed.
+      ...(birthTime !== undefined ? { birthTime } : {}),
       // Echoed so a client never has to guess what a preset resolved to.
       funnel: { requested: input.funnel, resolved: config },
       span: { from: input.from, to: input.to, days: Math.round(windowDays) },
@@ -180,12 +172,24 @@ export function registerKeyDateRoutes(
       density: { windowsPerQuarter: funnel.windowsPerQuarter, windows: funnel.windows.length },
       stories: stories.map((story) => ({
         id: story.id,
+        // The configuration, not this chart's instance of it. Two people who
+        // share a configuration share the signature, which is what lets naming
+        // live outside the engine — on a lookup keyed by this string.
+        signature: story.signature,
         aspect: story.aspect,
         orb: story.orb,
         members: story.members,
         score: story.score,
         strength: story.strength,
         scoringVersion: story.scoringVersion,
+        // Emitted only when the hour was assumed, and then for every story —
+        // `false` included, because with the block present the field answers a
+        // question the caller is actually asking. With a known birth time
+        // nothing is uncertain, so the field is absent rather than uniformly
+        // false: a `timeSensitive: false` on a chart with a real hour would
+        // read as a property of the story instead of a property of the
+        // request.
+        ...(birthTime !== undefined ? { timeSensitive: isTimeSensitive(story.members) } : {}),
       })),
       keyDates: funnel.windows.map((window) => ({
         storyId: window.storyId,

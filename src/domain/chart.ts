@@ -37,6 +37,15 @@ export interface ChartRequest {
   };
   readonly houseSystem: HouseSystem;
   readonly bodies: readonly BodyId[];
+  /**
+   * Whether `utc` came from an assumed birth hour. Changes no number here —
+   * the calculation cannot tell the difference and should not try — but it
+   * does change the response, which declares the assumption. It therefore has
+   * to reach the content hash, or a chart built on a guessed 03:00 and one
+   * built on a stated 03:00 would share a chartRef and an ETag while
+   * disagreeing about what they are.
+   */
+  readonly birthTimeAssumed?: boolean;
 }
 
 export interface ChartBody {
@@ -89,6 +98,11 @@ function computeChartRef(request: ChartRequest, jdUt: number): string {
     lon: request.geo.lon,
     houseSystem: request.houseSystem,
     bodies: [...request.bodies].sort(),
+    // Only when true, so every reference minted before unknown birth times
+    // existed still hashes to the same string. JSON.stringify drops an
+    // undefined value, which would make the absent case implicit rather than
+    // stated; the conditional makes it stated.
+    ...(request.birthTimeAssumed === true ? { birthTimeAssumed: true } : {}),
   });
 
   const digest = createHash('sha256').update(canonical).digest('base64url');

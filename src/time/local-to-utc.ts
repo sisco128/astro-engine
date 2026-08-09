@@ -64,6 +64,20 @@ export interface ResolvedInstant {
   readonly second: number;
 }
 
+export interface ResolveOptions {
+  /**
+   * What to do at a gap or a fold.
+   *
+   * 'reject' (the default) throws, because only the person who was there knows
+   * which 01:30 they were born in. 'compatible' takes Temporal's rule — the
+   * later instant across a gap, the earlier of a fold — and exists for the one
+   * caller that has nothing better to offer: the assumed 03:00 of an unknown
+   * birth time, where the hour is the engine's invention and refusing over a
+   * 60-minute ambiguity inside a declared 24-hour one would be theatre.
+   */
+  readonly disambiguation?: 'reject' | 'compatible';
+}
+
 function toUtcParts(instant: Temporal.Instant): ResolvedInstant {
   const utc = instant.toZonedDateTimeISO('UTC');
   return {
@@ -90,8 +104,12 @@ function toUtcParts(instant: Temporal.Instant): ResolvedInstant {
  * under `disambiguation: 'reject'`, so the two are told apart by counting the
  * possible instants: zero means a gap, two means a fold.
  */
-export function resolveLocalTime(local: LocalDateTime): ResolvedInstant {
+export function resolveLocalTime(
+  local: LocalDateTime,
+  options: ResolveOptions = {},
+): ResolvedInstant {
   const { year, month, day, hour, minute, second = 0, zone } = local;
+  const lenient = options.disambiguation === 'compatible';
 
   const plain = Temporal.PlainDateTime.from({ year, month, day, hour, minute, second });
 
@@ -109,6 +127,8 @@ export function resolveLocalTime(local: LocalDateTime): ResolvedInstant {
 
   if (possible.length === 0) {
     // Spring forward: this wall-clock time never happened.
+    if (lenient) return resolvedCompatibly(plain, zone);
+
     const before = plain
       .subtract({ hours: 2 })
       .toZonedDateTime(zone, { disambiguation: 'compatible' });
@@ -126,6 +146,8 @@ export function resolveLocalTime(local: LocalDateTime): ResolvedInstant {
 
   if (possible.length > 1) {
     // Fall back: this wall-clock time happened twice.
+    if (lenient) return resolvedCompatibly(plain, zone);
+
     throw new LocalTimeError(
       'AMBIGUOUS_LOCAL_TIME',
       `${plain.toString()} occurs twice in ${zone}; specify which by supplying a UTC instant instead.`,
@@ -146,6 +168,16 @@ export function resolveLocalTime(local: LocalDateTime): ResolvedInstant {
     ...toUtcParts(zoned.toInstant()),
     offset: zoned.offset,
   };
+}
+
+/**
+ * Temporal's own rule, applied on purpose: across a gap the wall-clock time is
+ * pushed forward by the size of the shift, across a fold the earlier of the two
+ * instants is taken. Reached only under `disambiguation: 'compatible'`.
+ */
+function resolvedCompatibly(plain: Temporal.PlainDateTime, zone: string): ResolvedInstant {
+  const zoned = plain.toZonedDateTime(zone, { disambiguation: 'compatible' });
+  return { ...toUtcParts(zoned.toInstant()), offset: zoned.offset };
 }
 
 /**

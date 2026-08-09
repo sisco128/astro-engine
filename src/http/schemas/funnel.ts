@@ -18,6 +18,7 @@ import { z } from 'zod';
 import { ASPECT_IDS } from '../../domain/orb-policy.js';
 import { FUNNEL_PRESETS, TIERS, type FunnelConfig } from '../../domain/timescales.js';
 import { BODY_IDS } from '../../ephemeris/bodies.js';
+import { WhenSchema } from './when.js';
 
 const AspectIdSchema = z.enum(ASPECT_IDS as [string, ...string[]]);
 const BodyIdSchema = z.enum(BODY_IDS as unknown as [string, ...string[]]);
@@ -58,29 +59,10 @@ export const MAX_WINDOW_DAYS = 365 * 15;
 
 export const KeyDatesRequestSchema = z
   .object({
-    when: z.union([
-      z.object({
-        utc: z.object({
-          year: z.number().int().min(-12000).max(16000),
-          month: z.number().int().min(1).max(12),
-          day: z.number().int().min(1).max(31),
-          hour: z.number().int().min(0).max(23),
-          minute: z.number().int().min(0).max(59),
-          second: z.number().int().min(0).max(60).optional(),
-        }),
-      }),
-      z.object({
-        local: z.object({
-          year: z.number().int().min(-12000).max(16000),
-          month: z.number().int().min(1).max(12),
-          day: z.number().int().min(1).max(31),
-          hour: z.number().int().min(0).max(23),
-          minute: z.number().int().min(0).max(59),
-          second: z.number().int().min(0).max(60).optional(),
-          zone: z.string().min(1),
-        }),
-      }),
-    ]),
+    // Shared with /v1/charts and /v1/transits/returns rather than copied. This
+    // schema carried its own character-for-character duplicate of the union
+    // until the unknown-birth-time variant had to be added to both.
+    when: WhenSchema,
     geo: z.object({
       lat: z.number().min(-90).max(90),
       lon: z.number().min(-180).max(180),

@@ -25,10 +25,24 @@ const BIRTH = {
 
 interface KeyDatesBody {
   chartRef: string;
+  birthTime?: {
+    assumed: true;
+    assumedLocal: { hour: number; minute: number; zone: string };
+    basis: string;
+    uncertaintyHours: number;
+  };
   funnel: { requested: unknown; resolved: { slow: { bodies: string[]; aspects: string[] } } };
   span: { days: number };
   density: { windowsPerQuarter: number; windows: number };
-  stories: { id: string; strength?: number; scoringVersion: string }[];
+  stories: {
+    id: string;
+    signature: string;
+    aspect: string;
+    members: string[];
+    strength?: number;
+    scoringVersion: string;
+    timeSensitive?: boolean;
+  }[];
   keyDates: {
     storyId: string;
     from: string;
@@ -41,14 +55,36 @@ interface ErrorBody {
   error: { code: string; message: string; details?: Record<string, unknown> };
 }
 
+/**
+ * The same birth, with the hour unknown. Paired with the narrowest funnel the
+ * schema allows and half the span: nothing asserted about it depends on the
+ * windows, and the funnel is the part that costs seconds.
+ */
+const BIRTH_NO_HOUR = {
+  when: { localDate: { year: 1987, month: 8, day: 12, zone: 'Europe/Rome' } },
+  geo: BIRTH.geo,
+  funnel: {
+    slow: { bodies: ['neptune'], aspects: ['conjunction'], orbDeg: 0.5 },
+    social: { bodies: ['saturn'], aspects: ['conjunction'], orbDeg: 0.5 },
+    fast: { bodies: ['mars'], aspects: ['conjunction'], orbDeg: 0.5 },
+    nesting: 'same-story',
+    clusterDays: 5,
+  },
+};
+
 let app: FastifyInstance;
 /** One computed result, reused: the funnel costs seconds, not milliseconds. */
 let base: KeyDatesBody;
+/** The same, with an unknown birth hour. */
+let assumed: KeyDatesBody;
 
 beforeAll(async () => {
   app = await buildApp();
   await app.ready();
   base = (await post({ ...BIRTH, from: '2024-01-01', to: '2027-01-01' })).json<KeyDatesBody>();
+  assumed = (
+    await post({ ...BIRTH_NO_HOUR, from: '2024-01-01', to: '2024-07-01' })
+  ).json<KeyDatesBody>();
 }, 120_000);
 
 afterAll(async () => {
@@ -119,6 +155,101 @@ describe('the funnel comes back whole', () => {
     for (const story of base.stories) {
       expect(story.scoringVersion).toBe('v2');
       expect(story.strength).toBeDefined();
+    }
+  });
+});
+
+describe('every story carries its configuration, not only its name', () => {
+  /**
+   * The signature is the handle a name hangs on. Naming lives outside the
+   * engine — a lookup service or a model keyed on this string — so the engine
+   * has to emit something two different people's charts can agree on, and
+   * nothing that only makes sense next to one of them.
+   */
+
+  it('spells the aspect and both member sides, and nothing else', () => {
+    expect(base.stories.length).toBeGreaterThan(0);
+
+    for (const story of base.stories) {
+      expect(story.signature.startsWith(`${story.aspect}:`)).toBe(true);
+
+      const [sideA, sideB, ...extra] = story.signature
+        .slice(story.aspect.length + 1)
+        .split('|')
+        .map((side) => side.split('+'));
+
+      expect(extra).toEqual([]);
+      expect(sideA).toBeDefined();
+      expect(sideB).toBeDefined();
+      // Every member, exactly once, split across the two sides.
+      expect([...(sideA ?? []), ...(sideB ?? [])].sort()).toEqual([...story.members].sort());
+      // Sorted within a side and between the sides, so the configuration has
+      // one spelling rather than several.
+      expect(sideA).toEqual([...(sideA ?? [])].sort());
+      expect(sideB).toEqual([...(sideB ?? [])].sort());
+      expect((sideA ?? []).join('+') <= (sideB ?? []).join('+')).toBe(true);
+    }
+  });
+
+  it('produces the exact string a lookup would be keyed on', () => {
+    // Moon fused with the true Node, square Chiron: the reference chart's
+    // configuration, written the one way it can be written.
+    expect(base.stories.map((story) => story.signature)).toContain('square:chiron|moon+trueNode');
+  });
+
+  it('gives two stories in one chart two different signatures', () => {
+    const signatures = base.stories.map((story) => story.signature);
+    expect(new Set(signatures).size).toBe(signatures.length);
+  });
+});
+
+describe('an unknown birth hour, degraded honestly', () => {
+  it('accepts a date with no hour and declares what it assumed', () => {
+    expect(assumed.birthTime).toBeDefined();
+    expect(assumed.birthTime?.assumed).toBe(true);
+    expect(assumed.birthTime?.assumedLocal).toEqual({ hour: 3, minute: 0, zone: 'Europe/Rome' });
+    expect(assumed.birthTime?.basis).toBe('spontaneous-birth-peak');
+    // The assumption picks the likeliest hour; the uncertainty is still a day.
+    expect(assumed.birthTime?.uncertaintyHours).toBe(24);
+    expect(assumed.stories.length).toBeGreaterThan(0);
+  });
+
+  it('flags the stories the unknown hour actually puts in question', () => {
+    // The Moon moves ~0.5 deg/hour, so ±12 hours is ±6 degrees — wider than
+    // any orb that forms a story. The angles turn a full circle.
+    const sensitive = ['moon', 'ascendant', 'midheaven'];
+
+    const flagged = assumed.stories.filter((story) => story.timeSensitive === true);
+    const unflagged = assumed.stories.filter((story) => story.timeSensitive === false);
+
+    expect(flagged.length).toBeGreaterThan(0);
+    expect(unflagged.length).toBeGreaterThan(0);
+
+    for (const story of flagged) {
+      expect(story.members.some((member) => sensitive.includes(member))).toBe(true);
+    }
+    for (const story of unflagged) {
+      expect(story.members.some((member) => sensitive.includes(member))).toBe(false);
+    }
+  });
+
+  it('says nothing at all when the birth time is known', () => {
+    // Not `timeSensitive: false` everywhere: with a real hour nothing is
+    // uncertain, and a false here would read as a property of the story rather
+    // than of the request.
+    expect(base.birthTime).toBeUndefined();
+    for (const story of base.stories) {
+      expect(story).not.toHaveProperty('timeSensitive');
+    }
+  });
+
+  it('keeps the key dates themselves whole', () => {
+    // The funnel is unaffected by where the hour came from: same three tiers,
+    // same story references.
+    const storyIds = new Set(assumed.stories.map((story) => story.id));
+    for (const keyDate of assumed.keyDates) {
+      expect(keyDate.path.map((step) => step.tier)).toEqual(['slow', 'social', 'fast']);
+      expect(storyIds.has(keyDate.storyId)).toBe(true);
     }
   });
 });

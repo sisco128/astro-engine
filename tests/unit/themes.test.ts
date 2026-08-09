@@ -13,7 +13,7 @@ import type { AspectPoint } from '../../src/domain/aspects.js';
 import { ORB_POLICIES } from '../../src/domain/orb-policy.js';
 import { SCORING_V1 } from '../../src/domain/scoring-weights.js';
 import { EDGE_WEIGHT, orbFalloff } from '../../src/domain/scoring-v2.js';
-import { identifyStories } from '../../src/domain/themes.js';
+import { identifyStories, isTimeSensitive, storySignature } from '../../src/domain/themes.js';
 
 function at(id: string, lon: number): AspectPoint {
   return { id, lon };
@@ -73,6 +73,94 @@ describe('story identification', () => {
     for (let i = 1; i < stories.length; i += 1) {
       expect(stories[i - 1]?.score).toBeGreaterThanOrEqual(stories[i]?.score ?? 0);
     }
+  });
+});
+
+describe('story signatures', () => {
+  /**
+   * The signature is what makes a configuration nameable outside the engine:
+   * a lookup service or a model is keyed on this string, so two people with
+   * the same configuration must produce the same one, and two different
+   * configurations must never collide.
+   */
+
+  it('gives the same signature to the same configuration in two different charts', () => {
+    // Same members, same aspect. Nothing else is shared: different longitudes,
+    // different orbs, and the second chart carries a body the first does not.
+    const first = identifyStories([at('sun', 0), at('saturn', 120)]);
+    const second = identifyStories([at('sun', 200), at('saturn', 322), at('mars', 47)]);
+
+    const trineIn = (result: typeof first): (typeof first)['stories'][number] | undefined =>
+      result.stories.find((story) => story.aspect === 'trine');
+
+    expect(trineIn(first)?.signature).toBe('trine:saturn|sun');
+    expect(trineIn(second)?.signature).toBe(trineIn(first)?.signature);
+
+    // Only the configuration is shared. The orbs differ (0 against 2 degrees),
+    // so the scores differ, and the second chart carries a story the first
+    // does not.
+    expect(trineIn(first)?.orb).toBeCloseTo(0, 9);
+    expect(trineIn(second)?.orb).toBeCloseTo(2, 9);
+    expect(second.stories.length).toBeGreaterThan(first.stories.length);
+  });
+
+  it('separates a different member set and a different aspect', () => {
+    const trineToSaturn = identifyStories([at('sun', 0), at('saturn', 120)]).stories[0];
+    const trineToJupiter = identifyStories([at('sun', 0), at('jupiter', 120)]).stories[0];
+    const squareToSaturn = identifyStories([at('sun', 0), at('saturn', 90)]).stories[0];
+
+    expect(trineToSaturn?.signature).toBe('trine:saturn|sun');
+    expect(trineToJupiter?.signature).toBe('trine:jupiter|sun');
+    expect(squareToSaturn?.signature).toBe('square:saturn|sun');
+
+    const all = [trineToSaturn, trineToJupiter, squareToSaturn].map((story) => story?.signature);
+    expect(new Set(all).size).toBe(3);
+  });
+
+  it('is unchanged by the order the members arrive in', () => {
+    const forwards = identifyStories([at('sun', 0), at('mercury', 5), at('saturn', 122)]);
+    const backwards = identifyStories([at('saturn', 122), at('mercury', 5), at('sun', 0)]);
+
+    expect(forwards.stories[0]?.signature).toBe('trine:mercury+sun|saturn');
+    expect(backwards.stories[0]?.signature).toBe(forwards.stories[0]?.signature);
+
+    // And at the function itself, where nothing has pre-sorted anything.
+    expect(storySignature('square', ['trueNode', 'moon'], ['chiron'])).toBe(
+      storySignature('square', ['chiron'], ['moon', 'trueNode']),
+    );
+  });
+
+  it('orders the two sides so a configuration has one spelling, not two', () => {
+    // Lexicographically smaller side first, by code unit — not localeCompare,
+    // whose order depends on the runtime's ICU build. This string is a key on
+    // another machine.
+    expect(storySignature('square', ['moon', 'trueNode'], ['chiron'])).toBe(
+      'square:chiron|moon+trueNode',
+    );
+  });
+
+  it('does not collide across a differently grouped set of the same members', () => {
+    // Same three bodies, different structure: Sun fused with Mercury against
+    // Saturn, versus Sun alone against a Mercury-Saturn group. The story is
+    // not the same story, and the signature must say so.
+    const fusedWithMercury = storySignature('trine', ['mercury', 'sun'], ['saturn']);
+    const fusedWithSaturn = storySignature('trine', ['sun'], ['mercury', 'saturn']);
+
+    expect(fusedWithMercury).not.toBe(fusedWithSaturn);
+  });
+});
+
+describe('what an unknown birth hour puts in question', () => {
+  it('flags the Moon and the two angles, and nothing else', () => {
+    // The Moon moves ~0.5 deg/hour: ±6 degrees over a 24-hour uncertainty,
+    // wider than any orb that forms a story. The angles turn a full circle.
+    expect(isTimeSensitive(['moon', 'saturn'])).toBe(true);
+    expect(isTimeSensitive(['ascendant', 'mars'])).toBe(true);
+    expect(isTimeSensitive(['midheaven', 'venus'])).toBe(true);
+
+    // The Sun covers one degree in a day, Mercury at its fastest 2.3.
+    expect(isTimeSensitive(['sun', 'mercury', 'saturn'])).toBe(false);
+    expect(isTimeSensitive(['pluto', 'chiron'])).toBe(false);
   });
 });
 

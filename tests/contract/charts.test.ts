@@ -30,6 +30,15 @@ interface ChartBody {
   chartRef: string;
   utc: string;
   bodies: { id: string; lon: number; lonSpeed: number; retrograde: boolean; house: number }[];
+  houses: { system: string; cusps: number[] };
+  angles: { ascendant: number };
+  birthTime?: {
+    assumed: true;
+    assumedLocal: { hour: number; minute: number; zone: string };
+    basis: string;
+    basisPeakLocalHours: { from: number; to: number };
+    uncertaintyHours: number;
+  };
 }
 
 interface ErrorBody {
@@ -115,6 +124,93 @@ describe('POST /v1/charts', () => {
       if (entry.retrograde) expect(entry.lonSpeed).toBeLessThan(0);
     }
     expect(body.bodies.find((entry) => entry.id === 'sun')?.retrograde).toBe(false);
+  });
+});
+
+describe('an unknown birth time, declared rather than hidden', () => {
+  /**
+   * The date is on the birth certificate; the hour usually is not. The
+   * customary answer is to compute noon and say nothing. Here the hour is
+   * 03:00 — a UCL study of ~5M births found over half of spontaneous births
+   * between 01:00 and 07:00 with a peak near 04:00, and a US study of ~43k
+   * deliveries put the peak at 02:00-04:00 — and the response says so.
+   */
+  const ROME_1987_NO_HOUR = {
+    when: { localDate: { year: 1987, month: 8, day: 12, zone: 'Europe/Rome' } },
+    geo: ROME_1987.geo,
+    houseSystem: 'P',
+  };
+
+  it('accepts a date without an hour and resolves it at 03:00 local', async () => {
+    const response = await postChart(ROME_1987_NO_HOUR);
+    expect(response.statusCode).toBe(200);
+
+    // 03:00 CEST is 01:00 UT.
+    expect(response.json<ChartBody>().utc).toBe('1987-08-12T01:00:00Z');
+  });
+
+  it('declares the assumption, in numbers and identifiers', async () => {
+    const { birthTime } = (await postChart(ROME_1987_NO_HOUR)).json<ChartBody>();
+
+    expect(birthTime).toBeDefined();
+    expect(birthTime?.assumed).toBe(true);
+    expect(birthTime?.assumedLocal).toEqual({ hour: 3, minute: 0, zone: 'Europe/Rome' });
+    expect(birthTime?.basis).toBe('spontaneous-birth-peak');
+    expect(birthTime?.basisPeakLocalHours).toEqual({ from: 2, to: 4 });
+    // The assumption picks the likeliest hour; it does not narrow the range.
+    expect(birthTime?.uncertaintyHours).toBe(24);
+  });
+
+  it('still computes houses and angles, rather than suppressing them', async () => {
+    // An Ascendant nobody can check is still the best available estimate. The
+    // birthTime block is what stops it being read as measured.
+    const body = (await postChart(ROME_1987_NO_HOUR)).json<ChartBody>();
+
+    expect(body.houses.cusps).toHaveLength(12);
+    expect(body.angles.ascendant).toBeGreaterThanOrEqual(0);
+    for (const entry of body.bodies) {
+      expect(entry.house).toBeGreaterThanOrEqual(1);
+      expect(entry.house).toBeLessThanOrEqual(12);
+    }
+  });
+
+  it('does not hand an assumed chart the reference of a stated one', async () => {
+    // Same instant, same numbers, different claim about where the hour came
+    // from. If both hashed alike, the ETag on this response would validate the
+    // other one — and the two disagree about what they are.
+    const stated = await postChart({
+      when: { local: { year: 1987, month: 8, day: 12, hour: 3, minute: 0, zone: 'Europe/Rome' } },
+      geo: ROME_1987.geo,
+      houseSystem: 'P',
+    });
+    const assumed = await postChart(ROME_1987_NO_HOUR);
+
+    expect(assumed.json<ChartBody>().utc).toBe(stated.json<ChartBody>().utc);
+    expect(assumed.json<ChartBody>().chartRef).not.toBe(stated.json<ChartBody>().chartRef);
+    expect(assumed.headers.etag).toBe(`"${assumed.json<ChartBody>().chartRef}"`);
+    expect(stated.json<ChartBody>().birthTime).toBeUndefined();
+  });
+
+  it('leaves a known birth time exactly as it was', async () => {
+    // The whole point of spreading the block conditionally: a request with a
+    // real hour gets the response it got before unknown times existed.
+    const body = (await postChart(ROME_1987)).json<ChartBody>();
+
+    expect(body.birthTime).toBeUndefined();
+    expect(Object.keys(body)).not.toContain('birthTime');
+    expect(body.utc).toBe('1987-08-12T09:32:00Z');
+  });
+
+  it('rejects an hour smuggled into the date-only variant', async () => {
+    // Otherwise the hour would be dropped in silence and the response would
+    // declare it unknown — the exact failure this feature exists to remove.
+    const response = await postChart({
+      when: { localDate: { year: 1987, month: 8, day: 12, hour: 11, zone: 'Europe/Rome' } },
+      geo: ROME_1987.geo,
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json<ErrorBody>().error.code).toBe('VALIDATION_FAILED');
   });
 });
 
