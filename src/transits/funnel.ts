@@ -94,8 +94,21 @@ function tierResonances(input: {
   natalLon: ReadonlyMap<string, number>;
   fromJd: JulianDayUT;
   toJd: JulianDayUT;
+  /**
+   * Scans already done in this call, keyed by tier, body and natal point.
+   *
+   * Stories share members — a stellium's Sun belongs to every story that Sun
+   * takes part in — and a resonance depends only on the transiting body, the
+   * natal longitude and the tier's filters, never on which story asked. Without
+   * this the same Mars-against-Sun scan runs once per story, and it is the
+   * dominant cost: the fast tier steps half a day at a time across the whole
+   * window. Measured on the ten-chart golden panel: 128 seconds to 78, with all
+   * ten densities identical to the digit — which is the point, since a faster
+   * funnel that answered differently would be a different funnel.
+   */
+  memo: Map<string, Resonance[]>;
 }): Resonance[] {
-  const { config, tier, story, natalLon, fromJd, toJd } = input;
+  const { config, tier, story, natalLon, fromJd, toJd, memo } = input;
   const found: Resonance[] = [];
 
   for (const body of config.bodies) {
@@ -103,16 +116,27 @@ function tierResonances(input: {
       const lon = natalLon.get(member);
       if (lon === undefined) continue;
 
-      found.push(
-        ...resonancesFor({
-          body,
-          member,
-          natalLon: lon,
-          fromJd,
-          toJd,
-          options: { orbDeg: config.orbDeg, aspects: config.aspects, tier },
-        }),
-      );
+      // The tier is part of the key because it is part of the answer: a
+      // Resonance carries its tier, and the same body against the same point
+      // can be scanned at two tiers with different orbs and aspects.
+      const key = `${tier}:${body}:${member}`;
+      const hit = memo.get(key);
+      if (hit !== undefined) {
+        found.push(...hit);
+        continue;
+      }
+
+      const scanned = resonancesFor({
+        body,
+        member,
+        natalLon: lon,
+        fromJd,
+        toJd,
+        options: { orbDeg: config.orbDeg, aspects: config.aspects, tier },
+      });
+
+      memo.set(key, scanned);
+      found.push(...scanned);
     }
   }
 
@@ -228,9 +252,13 @@ export function buildFunnel(input: {
   const { stories, natalPoints, fromJd, toJd, config } = input;
   const natalLon = new Map(natalPoints.map((point) => [point.id, point.lon]));
   const paths: FunnelPath[] = [];
+  // Scoped to this call. The window and the config are fixed for its duration,
+  // so they need not enter the key; a longer-lived cache would have to include
+  // both, and that job already belongs to the result cache one layer up.
+  const memo = new Map<string, Resonance[]>();
 
   for (const story of stories) {
-    const shared = { story, natalLon, fromJd, toJd };
+    const shared = { story, natalLon, fromJd, toJd, memo };
     const slowSet = tierResonances({ ...shared, config: config.slow, tier: 'slow' });
     if (slowSet.length === 0) continue;
 
