@@ -56,7 +56,13 @@ function list(name: string): readonly string[] {
     .filter((entry) => entry !== '');
 }
 
-const EPHEMERIS_PROFILES = ['core', 'full'] as const;
+// Kept in sync with ephemeris.manifest.json's `profiles` keys by a test
+// (tests/unit/env.test.ts) rather than by reading the manifest here — this
+// module's whole point is to be the one place that touches process.env, and
+// adding a file read for a value used only in the readiness report was not
+// worth blurring that. A profile added to the manifest without a matching
+// entry here is exactly the drift that took CI down once already.
+const EPHEMERIS_PROFILES = ['core', 'bounds', 'full'] as const;
 type EphemerisProfile = (typeof EPHEMERIS_PROFILES)[number];
 
 function profile(): EphemerisProfile {
@@ -109,4 +115,4 @@ export const env = Object.freeze({
 export type Env = typeof env;
 
 /** Re-exported so tests can assert the required-variable behaviour. */
-export { required };
+export { required, EPHEMERIS_PROFILES };
