@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  EPHEMERIS_PROFILE: core # 1.9 MB. The golden suite's charts all sit in 1800-2399 CE.
+
+jobs:
+  # Fails the build if anyone commits ephemeris data. The prototype carried
+  # 301 MB of .se1 files un-ignored for 20 months and sisco128/meteorite has
+  # ~117 MB permanently in its history — a .gitignore line demonstrably is not
+  # enough on its own.
+  no-large-blobs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reject .se1 files and blobs over 5 MB
+        run: |
+          base="${{ github.event.pull_request.base.sha || github.event.before }}"
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            base=$(git rev-list --max-parents=0 HEAD | tail -1)
+          fi
+
+          added=$(git diff --name-only --diff-filter=A "$base" HEAD || true)
+          [ -z "$added" ] && { echo "no added files"; exit 0; }
+
+          status=0
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            case "$file" in
+              *.se1)
+                echo "::error file=$file::Ephemeris data must never be committed. Use pnpm ephem:fetch."
+                status=1
+                continue
+                ;;
+            esac
+            size=$(git cat-file -s "$(git rev-parse "HEAD:$file")" 2>/dev/null || echo 0)
+            if [ "$size" -gt 5242880 ]; then
+              echo "::error file=$file::Blob is $size bytes, over the 5 MB limit."
+              status=1
+            fi
+          done <<< "$added"
+          exit $status
+
+  quality:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-14 is arm64 — the dev machine. Running both proves the
+        # prebuilt N-API binary story on the deploy target and locally, and
+        # that nothing ever invokes node-gyp.
+        os: [ubuntu-latest, macos-14]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # First assertion of the run. `sweph` is N-API and ships prebuilds, so a
+      # silent swap to a different build — or a compiler being invoked at all —
+      # fails here rather than surfacing as wrong numbers later.
+      - name: Assert the binding identity
+        run: |
+          version=$(node -e "process.stdout.write(require('sweph').version())")
+          echo "Swiss Ephemeris: $version"
+          [ "$version" = "2.10.03" ] || { echo "::error::expected 2.10.03, got $version"; exit 1; }
+
+      - run: pnpm typecheck
+      - run: pnpm lint
+
+      - name: Restore ephemeris cache
+        id: ephem-cache
+        uses: actions/cache@v4
+        with:
+          path: ephem
+          key: ephem-${{ env.EPHEMERIS_PROFILE }}-${{ hashFiles('ephemeris.manifest.json') }}
+
+      - run: pnpm ephem:fetch
+      - run: pnpm ephem:verify
+
+      - name: Reject a corrupted ephemeris file
+        shell: bash
+        run: |
+          # verify must FAIL on damaged data. A verifier that cannot fail is
+          # not a verifier — and this is exactly the check the prototype's
+          # fs.existsSync could not perform.
+          cp ephem/seas_18.se1 /tmp/seas.bak
+          node -e "const fs=require('fs');const b=fs.readFileSync('ephem/seas_18.se1');fs.writeFileSync('ephem/seas_18.se1',b.subarray(0,b.length-64))"
+          if pnpm ephem:verify > /dev/null 2>&1; then
+            echo "::error::ephem:verify passed on a truncated file"
+            cp /tmp/seas.bak ephem/seas_18.se1
+            exit 1
+          fi
+          cp /tmp/seas.bak ephem/seas_18.se1
+          echo "ok: verify rejected the corrupted file"
+
+      - run: pnpm test
+      - run: pnpm test:golden
+        env:
+          SE_EPHE_PATH: ./ephem
