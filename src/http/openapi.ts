@@ -17,7 +17,8 @@
  * without it.
  *
  * Response shapes are documented from zod only where a zod schema already
- * exists (ChartResponseSchema). key-dates and returns assemble their responses
+ * exists and the handler is typed by it (ChartResponseSchema,
+ * GeoSearchResponseSchema). key-dates and returns assemble their responses
  * inline in their route handlers; writing parallel zod schemas purely for
  * documentation would create a second copy of the truth that nothing keeps
  * honest — the exact bug class this codebase has been bitten by. Those
@@ -29,8 +30,10 @@
 
 import { z } from 'zod';
 
+import { DEFAULT_LIMIT, MAX_LIMIT } from '../geo/search.js';
 import { ENGINE_VERSION } from '../version.js';
 import { KeyDatesRequestSchema } from './schemas/funnel.js';
+import { GeoSearchResponseSchema, MAX_QUERY_LENGTH } from './schemas/geo.js';
 import { ReturnsRequestSchema } from './schemas/returns.js';
 import { ChartRequestSchema, ChartResponseSchema } from './schemas/v1.js';
 
@@ -219,6 +222,66 @@ export function buildOpenApiDocument(): Record<string, unknown> {
           responses: {
             '200': coarseResponse('The life-phase catalogue, keyed by body.'),
             '401': UNAUTHORIZED,
+          },
+        },
+      },
+      '/v1/geo/search': {
+        get: {
+          operationId: 'searchPlaces',
+          summary: 'Place name to coordinates and IANA zone',
+          description:
+            'Resolves a place name against OpenStreetMap Nominatim and attaches the IANA time ' +
+            'zone at each result, so a client gets the three things POST /v1/charts needs — ' +
+            'latitude, longitude and zone — from one call instead of assembling them itself. ' +
+            'The zone lookup is offline and deterministic. Results are cached on the normalised ' +
+            'query; `X-Cache` reports hit or miss.',
+          // Parameters are written out rather than converted from the zod
+          // schema. Query strings arrive as strings, so the schema coerces,
+          // and a converted `z.coerce.number()` documents its *input* — which
+          // is `unknown`, and would tell a generator that `limit` accepts
+          // anything. The bounds are imported constants, so the numbers below
+          // cannot drift from the ones that validate.
+          parameters: [
+            {
+              name: 'q',
+              in: 'query',
+              required: true,
+              description:
+                'The place to look for, e.g. "Roma" or "New York, NY". Trimmed, lower-cased and ' +
+                'whitespace-collapsed before it is sent upstream or cached.',
+              schema: { type: 'string', minLength: 1, maxLength: MAX_QUERY_LENGTH },
+            },
+            {
+              name: 'limit',
+              in: 'query',
+              required: false,
+              description:
+                'How many candidates to return. The engine always fetches the maximum from the ' +
+                'upstream and slices, so asking for fewer costs the same and asking again for ' +
+                'more is free.',
+              schema: {
+                type: 'integer',
+                minimum: 1,
+                maximum: MAX_LIMIT,
+                default: DEFAULT_LIMIT,
+              },
+            },
+          ],
+          responses: {
+            '200': jsonResponse(
+              'Candidate places, each with coordinates and an IANA zone.',
+              jsonSchema(GeoSearchResponseSchema, 'output'),
+            ),
+            '400': errorResponse(
+              'Missing or empty `q`, a `q` longer than the limit, an unknown query parameter, or ' +
+                'a `limit` outside its range (VALIDATION_FAILED).',
+            ),
+            '401': UNAUTHORIZED,
+            '502': errorResponse(
+              'The geocoding upstream timed out, refused the request, or answered with something ' +
+                'other than the expected shape (GEO_UPSTREAM_FAILED). Nothing else in the engine ' +
+                'is affected: no other endpoint calls it.',
+            ),
           },
         },
       },

@@ -28,6 +28,7 @@ const DOCUMENTED_PATHS = [
   '/v1/meta/stats',
   '/v1/meta/funnel',
   '/v1/meta/life-phases',
+  '/v1/geo/search',
   '/v1/charts',
   '/v1/transits/key-dates',
   '/v1/transits/returns',
@@ -49,6 +50,7 @@ interface Operation {
   summary: string;
   security?: Record<string, string[]>[];
   requestBody?: { required: boolean; content: Record<string, { schema: JsonSchema }> };
+  parameters?: { name: string; in: string; required?: boolean; schema: JsonSchema }[];
   responses: Record<
     string,
     { description: string; content?: Record<string, { schema: JsonSchema }> }
@@ -58,9 +60,15 @@ interface Operation {
 interface JsonSchema {
   type?: string;
   properties?: Record<string, JsonSchema>;
+  items?: JsonSchema;
   required?: string[];
   anyOf?: JsonSchema[];
   additionalProperties?: boolean;
+  minLength?: number;
+  maxLength?: number;
+  minimum?: number;
+  maximum?: number;
+  default?: unknown;
   $ref?: string;
   $schema?: string;
 }
@@ -252,7 +260,35 @@ describe('request bodies are real JSON Schema, converted from the zod schemas', 
   });
 });
 
+describe('query parameters', () => {
+  it('describes q and limit with the bounds that actually validate them', () => {
+    // The one endpoint whose input is a query string rather than a body, so
+    // the one whose input a generator reads from `parameters`. The numbers are
+    // imported constants on the document's side; this is what checks they are
+    // the same numbers a request is judged against.
+    const parameters = doc.paths['/v1/geo/search']?.['get']?.parameters ?? [];
+    const byName = new Map(parameters.map((parameter) => [parameter.name, parameter]));
+
+    expect([...byName.keys()].sort()).toEqual(['limit', 'q']);
+    for (const parameter of parameters) expect(parameter.in).toBe('query');
+
+    expect(byName.get('q')?.required).toBe(true);
+    expect(byName.get('q')?.schema.maxLength).toBe(200);
+
+    const limit = byName.get('limit');
+    expect(limit?.required).toBe(false);
+    expect(limit?.schema.type).toBe('integer');
+    expect(limit?.schema.minimum).toBe(1);
+    expect(limit?.schema.default).toBe(5);
+  });
+});
+
 describe('responses', () => {
+  /** The 200 schema an operation documents, if it documents one. */
+  function successSchema(path: string, method: string): JsonSchema | undefined {
+    return doc.paths[path]?.[method]?.responses['200']?.content?.['application/json']?.schema;
+  }
+
   it('describes the chart response from its zod schema', () => {
     const schema =
       doc.paths['/v1/charts']?.['post']?.responses['200']?.content?.['application/json']?.schema;
@@ -270,6 +306,24 @@ describe('responses', () => {
       'jdUt',
       'utc',
     ]);
+  });
+
+  it('describes the geo search response from its zod schema', () => {
+    // Also from zod, because the handler's return value is typed by that same
+    // schema — the compiler is what keeps this description true, which is the
+    // condition key-dates and returns do not yet meet.
+    const result = successSchema('/v1/geo/search', 'get')?.properties?.['results']?.items;
+
+    expect(Object.keys(result?.properties ?? {}).sort()).toEqual([
+      'countryCode',
+      'lat',
+      'lon',
+      'name',
+      'zone',
+    ]);
+    // The three fields POST /v1/charts needs are the three a client must be
+    // able to count on; the country code is a label and may be missing.
+    expect((result?.required ?? []).sort()).toEqual(['lat', 'lon', 'name', 'zone']);
   });
 
   it('describes the responses with no zod schema coarsely rather than inventing one', () => {

@@ -15,6 +15,8 @@
 import { availableParallelism } from 'node:os';
 import { resolve } from 'node:path';
 
+import { ENGINE_VERSION } from '../version.js';
+
 function required(name: string): string {
   const value = process.env[name];
   if (value === undefined || value.trim() === '') {
@@ -77,6 +79,12 @@ function profile(): EphemerisProfile {
 
 const defaultPoolSize = Math.max(1, Math.min(availableParallelism() - 1, 4));
 
+/**
+ * Read before the object literal because two settings need it: the AGPL source
+ * pointer, and the contact route inside the default geocoding User-Agent.
+ */
+const sourceUrl = optional('SOURCE_URL', 'https://github.com/sisco128/astro-engine');
+
 export const env = Object.freeze({
   nodeEnv: optional('NODE_ENV', 'development'),
   isProduction: optional('NODE_ENV', 'development') === 'production',
@@ -128,8 +136,37 @@ export const env = Object.freeze({
 
   rateLimitPerMinute: int('RATE_LIMIT_PER_MINUTE', 60),
 
+  /**
+   * Geocoding upstream for GET /v1/geo/search.
+   *
+   * The default is the public OpenStreetMap instance, and its usage policy
+   * forbids heavy or bulk production use: an absolute maximum of 1 request per
+   * second, no systematic downloading, and a real User-Agent. Those terms are
+   * enforced by OSM's operators by blocking the offending IP, not by a quota
+   * response, so a deployment that ignores them stops geocoding for everyone
+   * behind that address with no warning.
+   *
+   * The production path is a self-hosted Nominatim (or a commercial provider
+   * with the same API) pointed at by this variable. The engine's outbound
+   * queue holds to 1 rps regardless of what this points at — see
+   * src/geo/nominatim.ts — because a self-hosted instance is a change of
+   * capacity, not a change of contract.
+   */
+  nominatimBaseUrl: optional('NOMINATIM_BASE_URL', 'https://nominatim.openstreetmap.org'),
+
+  /**
+   * Sent as `User-Agent` on every geocoding request. Nominatim's policy
+   * requires one that identifies the application and offers a way to reach
+   * whoever runs it; requests without it are refused outright.
+   *
+   * The default names this engine and points at its source repository, which
+   * is a working contact route. A deployment serving real users should replace
+   * it with one carrying its own address.
+   */
+  geoUserAgent: optional('GEO_USER_AGENT', `astro-engine/${ENGINE_VERSION} (+${sourceUrl})`),
+
   /** Served by GET /v1/meta/license to satisfy AGPL-3.0 section 13. */
-  sourceUrl: optional('SOURCE_URL', 'https://github.com/sisco128/astro-engine'),
+  sourceUrl,
 });
 
 export type Env = typeof env;

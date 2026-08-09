@@ -61,6 +61,7 @@ compiler is needed — `sweph` ships prebuilt N-API binaries.
 | `GET`  | `/v1/meta/stats`         | Operational counters: cache, pool, uptime.                         |
 | `GET`  | `/v1/meta/funnel`        | Funnel vocabulary: tiers, presets, aspects, nesting rules, limits. |
 | `GET`  | `/v1/meta/life-phases`   | The life-phase catalogue, chart-independent.                       |
+| `GET`  | `/v1/geo/search`         | Place name → coordinates + IANA zone, in one call.                 |
 | `POST` | `/v1/charts`             | Natal chart. Deterministic; carries a strong ETag.                 |
 | `POST` | `/v1/transits/key-dates` | Key dates for a window, with the funnel as request parameters.     |
 | `POST` | `/v1/transits/returns`   | Planetary returns from birth, with life phases.                    |
@@ -206,6 +207,11 @@ before turning any of the last two off. `CORS_ORIGINS` is not optional in
 production: the engine exists to be called from other origins. Neither is
 `API_KEYS`, and that one is enforced rather than advised — see
 [Authentication](#authentication).
+
+`NOMINATIM_BASE_URL` defaults to the public OpenStreetMap geocoder, whose usage
+policy forbids heavy production use and is enforced by blocking the source
+address. Self-hosting Nominatim is the production path; the engine's outbound
+queue holds to one request per second either way.
 
 Design decisions and their trade-offs are recorded in [`docs/adr/`](docs/adr).
 
