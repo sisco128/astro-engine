@@ -17,6 +17,7 @@ import { EphemerisError } from '../ephemeris/errors.js';
 import { initEphemeris, report } from '../ephemeris/init.js';
 import { LocalTimeError } from '../time/local-to-utc.js';
 import { registerChartRoutes } from './routes/v1/charts.js';
+import { registerKeyDateRoutes } from './routes/v1/key-dates.js';
 
 /** HTTP status for each error code. Frozen at /v1. */
 const STATUS_BY_CODE: Readonly<Record<string, number>> = {
@@ -32,6 +33,7 @@ const STATUS_BY_CODE: Readonly<Record<string, number>> = {
   NONEXISTENT_LOCAL_TIME: 409,
   AMBIGUOUS_LOCAL_TIME: 409,
   INVALID_TIME_ZONE: 400,
+  WINDOW_TOO_LARGE: 400,
 };
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -141,6 +143,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   }));
 
   registerChartRoutes(app);
+  registerKeyDateRoutes(app);
 
   initEphemeris();
 
