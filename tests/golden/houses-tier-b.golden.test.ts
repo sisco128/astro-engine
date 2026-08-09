@@ -20,7 +20,6 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -35,6 +34,7 @@ import {
 } from '../../src/ephemeris/swe.js';
 import { wrap360 } from '../../src/math/angle.js';
 import { TOLERANCE_ARCSEC } from './matchers.js';
+import { useRepoEphemeris } from '../helpers/ephem-path.js';
 
 interface SwetestFixture {
   provider: string;
@@ -51,7 +51,7 @@ interface SwetestFixture {
   }[];
 }
 
-const EPHE_PATH = process.env['SE_EPHE_PATH'] ?? join(homedir(), 'Desktop/astro-engine/ephem');
+const EPHE_PATH = useRepoEphemeris();
 
 const fixture = JSON.parse(
   readFileSync(join(import.meta.dirname, 'fixtures/swetest-houses.json'), 'utf8'),

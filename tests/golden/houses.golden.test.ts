@@ -12,9 +12,6 @@
  * 30 degrees of Ascendant.
  */
 
-import { homedir } from 'node:os';
-import { join } from 'node:path';
-
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { wrap360 } from '../../src/math/angle.js';
@@ -27,8 +24,9 @@ import {
   type HouseSystem,
   type JulianDayUT,
 } from '../../src/ephemeris/swe.js';
+import { useRepoEphemeris } from '../helpers/ephem-path.js';
 
-const EPHE_PATH = process.env['SE_EPHE_PATH'] ?? join(homedir(), 'Desktop/astro-engine/ephem');
+const EPHE_PATH = useRepoEphemeris();
 
 /** 1987-08-12 09:32:00 UT — the local 11:32 CEST converted correctly. */
 const ROME_1987: { jd: JulianDayUT; lat: number; lon: number } = {

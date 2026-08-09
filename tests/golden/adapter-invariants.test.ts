@@ -9,7 +9,6 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -23,8 +22,9 @@ import {
   setForbidFallback,
   type JulianDayUT,
 } from '../../src/ephemeris/swe.js';
+import { useRepoEphemeris } from '../helpers/ephem-path.js';
 
-const EPHE_PATH = process.env['SE_EPHE_PATH'] ?? join(homedir(), 'Desktop/infra-test-2/ephem');
+const EPHE_PATH = useRepoEphemeris();
 
 /** J2000.0 */
 const JD_J2000 = 2451545.0 as JulianDayUT;

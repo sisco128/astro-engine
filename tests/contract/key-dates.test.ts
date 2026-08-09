@@ -7,13 +7,11 @@
  * direction claimed.
  */
 
-import { homedir } from 'node:os';
-import { join } from 'node:path';
-
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { useRepoEphemeris } from '../helpers/ephem-path.js';
 
-process.env['SE_EPHE_PATH'] ??= join(homedir(), 'Desktop/astro-engine/ephem');
+useRepoEphemeris();
 process.env['LOG_LEVEL'] = 'silent';
 
 const { buildApp } = await import('../../src/http/app.js');

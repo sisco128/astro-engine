@@ -6,9 +6,6 @@
  * here rather than left in a comment.
  */
 
-import { homedir } from 'node:os';
-import { join } from 'node:path';
-
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { identifyStories } from '../../src/domain/themes.js';
@@ -27,8 +24,9 @@ import {
   type JulianDayUT,
 } from '../../src/ephemeris/swe.js';
 import { buildFunnel, type FunnelResult } from '../../src/transits/funnel.js';
+import { useRepoEphemeris } from '../helpers/ephem-path.js';
 
-const EPHE_PATH = process.env['SE_EPHE_PATH'] ?? join(homedir(), 'Desktop/astro-engine/ephem');
+const EPHE_PATH = useRepoEphemeris();
 
 let natalPoints: { id: string; lon: number }[];
 let stories: ReturnType<typeof identifyStories>['stories'];

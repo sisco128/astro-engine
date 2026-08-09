@@ -11,6 +11,12 @@ concurrency:
 
 env:
   EPHEMERIS_PROFILE: core # 1.9 MB. The golden suite's charts all sit in 1800-2399 CE.
+  # Job-wide on purpose. Attached to a single step, it silently missed
+  # `pnpm test`, whose contract suite then fell back to a developer's home
+  # directory, found nothing, and let Swiss Ephemeris drop to the Moshier
+  # model. Every step that touches the ephemeris needs this, so no step
+  # declares it.
+  SE_EPHE_PATH: ./ephem
 
 jobs:
   # Fails the build if anyone commits ephemeris data. The prototype carried
@@ -114,5 +120,3 @@ jobs:
 
       - run: pnpm test
       - run: pnpm test:golden
-        env:
-          SE_EPHE_PATH: ./ephem

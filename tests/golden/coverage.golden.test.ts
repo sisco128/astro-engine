@@ -14,8 +14,6 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
@@ -26,8 +24,9 @@ import {
   setForbidFallback,
   type JulianDayUT,
 } from '../../src/ephemeris/swe.js';
+import { useRepoEphemeris } from '../helpers/ephem-path.js';
 
-const EPHE_PATH = process.env['SE_EPHE_PATH'] ?? join(homedir(), 'Desktop/astro-engine/ephem');
+const EPHE_PATH = useRepoEphemeris();
 
 const manifest = JSON.parse(readFileSync('ephemeris.manifest.json', 'utf8')) as {
   measuredCoverage: { minJdUt: number; maxJdUt: number; minDate: string; maxDate: string };

@@ -13,7 +13,6 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -26,6 +25,7 @@ import {
 } from '../../src/ephemeris/swe.js';
 import type { BodyId } from '../../src/ephemeris/bodies.js';
 import { TOLERANCE_ARCSEC } from './matchers.js';
+import { useRepoEphemeris } from '../helpers/ephem-path.js';
 
 interface HorizonsReference {
   provider: string;
@@ -33,7 +33,7 @@ interface HorizonsReference {
   epochs: { jdUt: number; bodies: Record<string, { lon: number; lat: number }> }[];
 }
 
-const EPHE_PATH = process.env['SE_EPHE_PATH'] ?? join(homedir(), 'Desktop/astro-engine/ephem');
+const EPHE_PATH = useRepoEphemeris();
 
 const reference = JSON.parse(
   readFileSync(join(import.meta.dirname, 'fixtures/horizons-reference.json'), 'utf8'),

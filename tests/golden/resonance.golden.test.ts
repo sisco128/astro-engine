@@ -6,9 +6,6 @@
  * happened to be sampled.
  */
 
-import { homedir } from 'node:os';
-import { join } from 'node:path';
-
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import {
@@ -20,8 +17,9 @@ import {
 } from '../../src/ephemeris/swe.js';
 import { resonancesFor, scanStepDays } from '../../src/transits/resonance.js';
 import { separation } from '../../src/math/angle.js';
+import { useRepoEphemeris } from '../helpers/ephem-path.js';
 
-const EPHE_PATH = process.env['SE_EPHE_PATH'] ?? join(homedir(), 'Desktop/astro-engine/ephem');
+const EPHE_PATH = useRepoEphemeris();
 
 beforeAll(() => {
   setEphemerisPath(EPHE_PATH);
