@@ -95,6 +95,12 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
 
+      # Not redundant with typecheck: `pnpm build` ran through a tsconfig that
+      # did not exist for this project's entire early history, and nobody
+      # noticed because dev and tests go through tsx. Compiling is the only
+      # step that can catch that class of breakage.
+      - run: pnpm build
+
       - name: Restore ephemeris cache
         id: ephem-cache
         uses: actions/cache@v4
@@ -120,6 +126,45 @@ jobs:
           fi
           cp /tmp/seas.bak ephem/seas_18.se1
           echo "ok: verify rejected the corrupted file"
+
+      # Compiling proved dist exists; this proves it runs. `node dist/main.js`
+      # is what production executes, and nothing else on this workflow — or in
+      # local dev, which goes through tsx — ever invokes it. Placed after the
+      # ephemeris steps so the boot uses the files they already fetched.
+      # /v1/ready, not just /v1/health: ready turns 200 only once the ephemeris
+      # loaded, the probe passed and a forked dist/pool/worker.js reported in,
+      # so it also proves the pool resolved its compiled worker path — the one
+      # thing about this build that no amount of type-checking can confirm.
+      - name: Smoke-boot the build
+        shell: bash
+        run: |
+          # POOL_SIZE=1 because readiness needs a worker to report in, not a
+          # pool. Logs go to a file, not the step's stdout: a background
+          # process holding the runner's pipe open is a known way to hang a
+          # job, and a boot that never becomes ready has to be able to say why.
+          PORT=3199 LOG_LEVEL=info POOL_SIZE=1 node dist/main.js > /tmp/dist-boot.log 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+
+          ready=""
+          for _ in $(seq 1 60); do
+            if curl -sf -o /tmp/ready.json http://127.0.0.1:3199/v1/ready; then
+              ready=yes
+              break
+            fi
+            sleep 0.5
+          done
+
+          if [ -z "$ready" ]; then
+            echo "::error::node dist/main.js never reported ready within 30s"
+            cat /tmp/dist-boot.log
+            exit 1
+          fi
+
+          curl -sf http://127.0.0.1:3199/v1/health
+          echo ""
+          cat /tmp/ready.json
+          echo ""
 
       - run: pnpm test
       - run: pnpm test:golden

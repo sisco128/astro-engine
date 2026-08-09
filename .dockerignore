@@ -1,0 +1,29 @@
+# The build context should be a few hundred KB of source. Without this file it
+# would be over 200 MB — node_modules and a populated ephem/ — uploaded to the
+# daemon on every build, to be discarded by stages that fetch their own.
+#
+# ephem/ in particular must never be sent: the image's copy comes from the
+# ephemeris stage, which verifies every checksum. A developer's local
+# directory, with whatever profile and whatever partial state it is in, is not
+# the same thing and must not be able to leak in.
+node_modules
+dist
+ephem
+coverage
+reports
+.git
+.github
+.claude
+.env
+.env.*
+tests
+docs
+*.md
+*.log
+.DS_Store
+
+# LICENSE is deliberately absent from this list: the runtime stage ships it.
+
+# The ephemeris stage copies exactly one script; the rest are dev tooling.
+scripts/*
+!scripts/fetch-ephemeris.ts
