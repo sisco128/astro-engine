@@ -64,7 +64,29 @@ export interface NatalPoint {
   readonly lon: number;
 }
 
-/** Every resonance of a tier against the members of one story. */
+/**
+ * Every resonance of a tier against the members of one story.
+ *
+ * Targets are the individual MEMBERS, not the composite's mean longitude.
+ * That is a decision, and it has a visible cost worth stating.
+ *
+ * A stellium spans real width — the reference chart's covers 12.6 degrees
+ * across Mercury, Venus, Sun and Mars. Uranus moves 0.034 deg/day, so squaring
+ * it takes four and a half years and produces twelve separate contacts:
+ *
+ *   2020-08, 2021-05, 2022-01   square Mercury
+ *   2022-05, 2022-11, 2023-03   square Venus
+ *   2022-08, 2023-05, 2024-02   square Sun
+ *   2023-08, 2024-05, 2025-02   square Mars
+ *
+ * Lived, that is one long process, and it is remembered as one — which is the
+ * whole reason composites exist. Targeting the composite mean would report it
+ * as a single event with three passes.
+ *
+ * Member targeting is kept anyway, because it preserves which planet is exact
+ * at a given moment. A client can always aggregate members upward into "Uranus
+ * is squaring the stellium"; it cannot recover the members from a mean.
+ */
 function tierResonances(input: {
   config: TierConfig;
   tier: TierId;
