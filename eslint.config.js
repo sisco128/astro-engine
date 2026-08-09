@@ -13,7 +13,10 @@ import tseslint from 'typescript-eslint';
  */
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'node_modules/**', 'ephem/**', 'coverage/**'],
+    // `.claude/**` holds sibling worktrees where background agents work. Their
+    // in-progress files are not this checkout's code, and linting them made a
+    // clean branch report another branch's errors.
+    ignores: ['dist/**', '**/dist/**', 'node_modules/**', '.claude/**', 'ephem/**', 'coverage/**'],
   },
 
   js.configs.recommended,
