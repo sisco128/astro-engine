@@ -65,3 +65,14 @@ services:
       # happens. Left to be set at deploy time rather than guessed here.
       - key: CORS_ORIGINS
         sync: false
+
+      # Required, and the service refuses to start without it:
+      #
+      #   Refusing to start: NODE_ENV=production with an empty API_KEYS would
+      #   serve every endpoint to anyone who can reach this host.
+      #
+      # Which is the right behaviour and caught a real omission — the first
+      # version of this blueprint declared it for the interpreter and forgot
+      # it here, and the engine said so instead of coming up open.
+      - key: API_KEYS
+        sync: false
