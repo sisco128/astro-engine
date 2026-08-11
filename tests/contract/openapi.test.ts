@@ -325,6 +325,10 @@ describe('responses', () => {
 
     expect(Object.keys(schema?.properties ?? {}).sort()).toEqual([
       'angles',
+      // The natal aspects with their orbs. Published because an aspect exists
+      // only relative to an orb policy, and a client deriving it would be the
+      // eighth copy of tables this project reduced to one.
+      'aspects',
       // Present only when the hour was assumed, and the reason the houses
       // below can be trusted or not — a client must see it in the contract.
       'birthTime',

@@ -20,6 +20,8 @@ import {
   type JulianDayUT,
 } from '../ephemeris/swe.js';
 import { houseOf } from './houses.js';
+import { aspectsAmong, type Aspect } from './aspects.js';
+import { ORB_POLICIES } from './orb-policy.js';
 
 export interface ChartRequest {
   /** UTC instant of birth. Local-time resolution happens before this point. */
@@ -80,6 +82,19 @@ export interface Chart {
     readonly system: HouseSystem;
     readonly cusps: readonly number[];
   };
+  /**
+   * The natal aspects, with their orbs.
+   *
+   * Computed here rather than left to the client for the same reason the orb
+   * tables were consolidated in the first place: an aspect exists only
+   * relative to a policy, and a second copy of that policy elsewhere is a
+   * second answer waiting to disagree with this one.
+   *
+   * A client that wants the count takes `aspects.length`; one that wants to
+   * print "orbe 2,1°" takes `orb`. Both were previously impossible without
+   * reimplementing the policy.
+   */
+  readonly aspects: readonly Aspect[];
 }
 
 /**
@@ -135,12 +150,20 @@ export function calculateChart(request: ChartRequest): Chart {
     };
   });
 
+  // `natal.default` because that is what a natal chart means here. The transit
+  // policies are tighter and belong to the funnel, not to the chart.
+  const aspects = aspectsAmong(
+    bodies.map((body) => ({ id: body.id, lon: body.lon, lonSpeed: body.lonSpeed })),
+    ORB_POLICIES['natal.default'],
+  );
+
   return {
     chartRef: computeChartRef(request, jdUt),
     jdUt,
     utc: toIsoUtc(request.utc),
     geo: { lat: request.geo.lat, lon: request.geo.lon },
     bodies,
+    aspects,
     angles: {
       ascendant: houses.ascendant,
       midheaven: houses.midheaven,

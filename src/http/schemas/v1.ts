@@ -12,6 +12,7 @@
 
 import { z } from 'zod';
 
+import { ASPECT_IDS } from '../../domain/orb-policy.js';
 import { BODY_IDS, DEFAULT_BODIES } from '../../ephemeris/bodies.js';
 import { HOUSE_SYSTEMS } from '../../ephemeris/swe.js';
 import { BirthTimeAssumptionSchema, WhenSchema } from './when.js';
@@ -81,6 +82,28 @@ export const ChartResponseSchema = z.object({
     system: HouseSystemSchema,
     cusps: z.array(z.number()).length(12),
   }),
+  /**
+   * The natal aspects, with their orbs.
+   *
+   * An aspect exists only relative to an orb policy, so the engine publishes
+   * them rather than leaving each client to reimplement the tables — which is
+   * exactly the duplication this project spent a phase removing, seven copies
+   * down to one. A second copy in a frontend would be the eighth.
+   *
+   * `aspects.length` is the count; `orb` is the number a reader checks against
+   * the longitudes in the same response.
+   */
+  aspects: z.array(
+    z.object({
+      a: BodyIdSchema,
+      b: BodyIdSchema,
+      aspect: z.enum(ASPECT_IDS as [string, ...string[]]),
+      exactAngle: z.number(),
+      separation: z.number(),
+      orb: z.number(),
+      applying: z.boolean().optional(),
+    }),
+  ),
   /**
    * Present only for the `localDate` variant of `when`. The houses and angles
    * above are computed at the assumed hour and returned rather than

@@ -361,3 +361,54 @@ describe('service endpoints', () => {
     expect(response.json<ErrorBody>().error.code).toBe('NOT_FOUND');
   });
 });
+
+describe('the natal aspects', () => {
+  it('come back with the chart, with their orbs', async () => {
+    // Neither the count nor the orb could be had before this. A client that
+    // wanted either had to reimplement the orb policy — the exact duplication
+    // this project spent a phase removing, seven copies down to one.
+    const body = (await postChart(ROME_1987)).json<
+      ChartBody & {
+        aspects: { a: string; b: string; aspect: string; orb: number; separation: number }[];
+      }
+    >();
+
+    expect(body.aspects.length).toBeGreaterThan(0);
+
+    for (const aspect of body.aspects) {
+      expect(body.bodies.some((entry) => entry.id === aspect.a)).toBe(true);
+      expect(body.bodies.some((entry) => entry.id === aspect.b)).toBe(true);
+      // Inside the policy's widest orb, and never negative.
+      expect(aspect.orb).toBeGreaterThanOrEqual(0);
+      expect(aspect.orb).toBeLessThanOrEqual(10);
+    }
+  });
+
+  it('reports an orb that matches the longitudes it ships', async () => {
+    // The whole point of publishing the number is that it can be checked, so
+    // the test checks it the way a reader would: from the positions on screen.
+    const body = (await postChart(ROME_1987)).json<
+      ChartBody & {
+        aspects: { a: string; b: string; aspect: string; exactAngle: number; orb: number }[];
+      }
+    >();
+
+    const sample = body.aspects[0];
+    expect(sample).toBeDefined();
+    if (sample === undefined) return;
+
+    const a = body.bodies.find((entry) => entry.id === sample.a)?.lon ?? 0;
+    const b = body.bodies.find((entry) => entry.id === sample.b)?.lon ?? 0;
+    // Deliberately hand-written, and the one place in this repository where
+    // that is right: checking a published number with the same helper that
+    // produced it proves only that the helper is self-consistent. A reader
+    // with the longitudes on screen does this arithmetic, so the test does it
+    // too. Safe here because both longitudes are already in [0, 360), which
+    // is what the rule exists to guarantee elsewhere.
+    // eslint-disable-next-line no-restricted-syntax
+    const raw = Math.abs(a - b) % 360;
+    const separation = raw > 180 ? 360 - raw : raw;
+
+    expect(Math.abs(separation - sample.exactAngle)).toBeCloseTo(sample.orb, 6);
+  });
+});
