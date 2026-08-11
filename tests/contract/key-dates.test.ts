@@ -47,7 +47,14 @@ interface KeyDatesBody {
     storyId: string;
     from: string;
     intensity: number;
-    path: { tier: string; body: string; member: string; exact: string; durationDays: number }[];
+    path: {
+      tier: string;
+      body: string;
+      member: string;
+      exact: string;
+      durationDays: number;
+      orbAtKeyDeg: number;
+    }[];
   }[];
 }
 
@@ -106,6 +113,39 @@ describe('the funnel comes back whole', () => {
     for (const keyDate of base.keyDates) {
       expect(keyDate.path.map((step) => step.tier)).toEqual(['slow', 'social', 'fast']);
     }
+  });
+
+  it('says how close each tier is at the key date itself', () => {
+    // The number the interface prints under each tier's sentence — "Plutone
+    // trigono Luna · orbe 0,4°". It needs the transiting longitude AT the key
+    // date, which only the engine can evaluate; leaving it derivable-but-absent
+    // is how clients end up deriving it wrong.
+    for (const keyDate of base.keyDates) {
+      for (const step of keyDate.path) {
+        expect(step.orbAtKeyDeg).toBeGreaterThanOrEqual(0);
+        // NOT bounded by the configured orb, and the first run of this test
+        // proved it: 1.086° against a 1° policy. A slow contact's interval is
+        // the envelope of its retrograde passes, and between two passes the
+        // body drifts outside the orb while the window, correctly, stays
+        // open. That drift is real information — it is why the number is
+        // published instead of left for clients to derive — so the bound here
+        // is a sanity ceiling, not the policy.
+        expect(step.orbAtKeyDeg).toBeLessThanOrEqual(5);
+      }
+
+      // The key date IS the fast contact's exact instant, so its orb is zero
+      // up to root-finding tolerance: 1e-6 days at lunar speed is ~1.5e-5°.
+      const fast = keyDate.path[2];
+      expect(fast?.orbAtKeyDeg).toBeLessThanOrEqual(1e-3);
+
+      // And the slow tier is genuinely NOT exact at the key date — if it were,
+      // the field would be indistinguishable from a constant zero and this
+      // test would prove nothing. At least one window's slow orb must be
+      // meaningfully open.
+    }
+
+    const slowOrbs = base.keyDates.map((keyDate) => keyDate.path[0]?.orbAtKeyDeg ?? 0);
+    expect(Math.max(...slowOrbs)).toBeGreaterThan(0.01);
   });
 
   it('gives each tier a window of its own length, not a flat 30 days', () => {

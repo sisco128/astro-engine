@@ -19,9 +19,11 @@
  * to 2.7 years for a Pluto passage with its retrograde loops.
  */
 
+import { ASPECTS } from '../domain/orb-policy.js';
 import type { Story } from '../domain/themes.js';
 import type { FunnelConfig, TierConfig, TierId } from '../domain/timescales.js';
-import type { JulianDayUT } from '../ephemeris/swe.js';
+import { bodyState, type JulianDayUT } from '../ephemeris/swe.js';
+import { signedSeparation } from '../math/angle.js';
 import { resonancesFor, type Resonance } from './resonance.js';
 
 export interface FunnelPath {
@@ -32,6 +34,20 @@ export interface FunnelPath {
   readonly fast: Resonance;
   /** The key date: the exact contact of the fast body. */
   readonly keyJd: number;
+  /**
+   * Orb of each tier's contact AT the key date, in degrees.
+   *
+   * A contact's own record says when it is exact; this says how close it is at
+   * the one instant the window is about. The fast orb is ~0 by construction —
+   * the key date IS its exact contact — and is published anyway because a
+   * derivable-but-absent field is how clients end up deriving it wrong.
+   *
+   * This is the number the interface prints under each tier's sentence
+   * ("Plutone trigono Luna · orbe 0,4°"), in the register that exists to be
+   * checked. It could not be computed client-side: it needs the transiting
+   * longitude at the key date, which only the engine can evaluate.
+   */
+  readonly orbAtKeyDeg: { readonly slow: number; readonly social: number; readonly fast: number };
   /**
    * Product of the three resonance intensities and the story's own strength.
    * Absent story strength (v1 scoring) it is the resonance product alone.
@@ -195,6 +211,20 @@ function cluster(paths: readonly FunnelPath[], clusterDays: number): KeyWindow[]
   return windows;
 }
 
+/** Orb of one contact at an arbitrary instant. */
+function orbAt(
+  jd: JulianDayUT,
+  resonance: Resonance,
+  natalLon: ReadonlyMap<string, number>,
+): number {
+  const natal = natalLon.get(resonance.member);
+  // A resonance was found against this member, so its longitude is in the map;
+  // the guard is for the type system, not for a case that occurs.
+  if (natal === undefined) return Number.NaN;
+  const lon = bodyState(jd, resonance.body).lon;
+  return Math.abs(signedSeparation(lon, natal, ASPECTS[resonance.aspect].angle, resonance.side));
+}
+
 /** The three-level nesting for one story. */
 function nest(input: {
   story: Story;
@@ -202,8 +232,9 @@ function nest(input: {
   socialSet: readonly Resonance[];
   fastSet: readonly Resonance[];
   nesting: FunnelConfig['nesting'];
+  natalLon: ReadonlyMap<string, number>;
 }): FunnelPath[] {
-  const { story, slowSet, socialSet, fastSet, nesting } = input;
+  const { story, slowSet, socialSet, fastSet, nesting, natalLon } = input;
   const samePoint = nesting === 'same-point';
   const strength = story.strength ?? 1;
   const paths: FunnelPath[] = [];
@@ -217,15 +248,21 @@ function nest(input: {
         if (samePoint && fast.member !== slow.member) continue;
         if (!contains(social, fast.exactJd)) continue;
 
+        const keyJd = fast.exactJd as JulianDayUT;
         paths.push({
           storyId: story.id,
           slow,
           social,
           fast,
-          keyJd: fast.exactJd,
+          keyJd,
           // Each resonance peaks at 1 at its own exact contact, so what
           // separates one key date from another is the story's own strength.
           intensity: strength,
+          orbAtKeyDeg: {
+            slow: orbAt(keyJd, slow, natalLon),
+            social: orbAt(keyJd, social, natalLon),
+            fast: orbAt(keyJd, fast, natalLon),
+          },
         });
       }
     }
@@ -283,7 +320,7 @@ export function buildFunnel(input: {
     const fastSet = tierResonances({ ...shared, config: config.fast, tier: 'fast' });
     if (fastSet.length === 0) continue;
 
-    paths.push(...nest({ story, slowSet, socialSet, fastSet, nesting: config.nesting }));
+    paths.push(...nest({ story, slowSet, socialSet, fastSet, nesting: config.nesting, natalLon }));
   }
 
   paths.sort((a, b) => a.keyJd - b.keyJd);

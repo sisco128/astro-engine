@@ -211,6 +211,11 @@ export function registerKeyDateRoutes(
             exit: jdToIso(resonance.exitJd),
             durationDays: resonance.durationDays,
             precisionDays: resonance.precisionDays,
+            // How close this contact is at the key date itself — the number
+            // printed under the tier's sentence. ~0 for the fast tier by
+            // construction, published anyway: a derivable-but-absent field is
+            // how clients end up deriving it wrong.
+            orbAtKeyDeg: window.peak.orbAtKeyDeg[tier],
           };
         }),
       })),
