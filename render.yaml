@@ -1,0 +1,67 @@
+# Render Blueprint — astro-engine
+#
+# Docker, not a native Node build: the image bakes in the Swiss Ephemeris
+# files and pins their SHA-256, and the runtime forks persistent workers. Both
+# are why this service is a container and not a function. See the Dockerfile.
+#
+# Apply with: render blueprint launch   (or New → Blueprint in the dashboard)
+
+services:
+  - type: web
+    name: astro-engine
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    region: frankfurt
+    # Not free: a free instance sleeps after fifteen minutes, and waking this
+    # one means starting the worker pool and re-reading the ephemeris before
+    # the first answer. A frontend that occasionally waits forty seconds for
+    # the horizon is a frontend nobody trusts.
+    plan: starter
+    healthCheckPath: /v1/ready
+    autoDeploy: true
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: HOST
+        value: 0.0.0.0
+      - key: LOG_LEVEL
+        value: info
+
+      # The two invariants that must never be relaxed in a deployed service.
+      # Without them the library silently falls back to its built-in Moshier
+      # approximation when a file is missing — same shape of answer, quietly
+      # wrong, and nobody finds out.
+      - key: SE_STRICT_EPHEMERIS
+        value: 'true'
+      - key: SE_FORBID_FALLBACK
+        value: 'true'
+      - key: SE_EPHE_PATH
+        value: /app/ephem
+
+      # Matches what the Dockerfile installed. Reported by /v1/ready, so it is
+      # a claim about the image and changing it here changes the claim, not the
+      # data on disk.
+      - key: EPHEMERIS_PROFILE
+        value: full
+
+      # 0 means one worker per core. A starter instance has little, so this
+      # resolves small on purpose — the pool exists for isolation, not
+      # throughput.
+      - key: POOL_SIZE
+        value: '0'
+      - key: POOL_TASK_TIMEOUT_MS
+        value: '60000'
+
+      - key: CACHE_MAX_ITEMS
+        value: '500'
+      - key: CACHE_MAX_BYTES
+        value: '268435456'
+
+      # Which origins may call this directly. Navigate reaches the engine from
+      # its server, so this is only for the browser-side wheel if that ever
+      # happens. Left to be set at deploy time rather than guessed here.
+      - key: CORS_ORIGINS
+        sync: false
