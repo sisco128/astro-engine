@@ -110,8 +110,21 @@ export type KeyDatesRequest = z.infer<typeof KeyDatesRequestSchema>;
  */
 export const DEFAULT_PAST_DAYS = 365 * 10;
 
-/** Top windows a single request will return. */
-export const MAX_STORY_WINDOWS = 50;
+/**
+ * Top windows a single request will return.
+ *
+ * Fifty was chosen when the slow tier took hard aspects only, and it was
+ * comfortably above anything a story produced. Admitting the soft aspects
+ * there roughly doubled the density, and the reference chart's largest story
+ * now yields 53 over a ten-year span — so the cap started silently truncating
+ * a real answer, which tests/golden/story-windows.golden.test.ts caught by
+ * disagreeing with /v1/transits/key-dates about the same story.
+ *
+ * Raised with the density rather than to fit that one number: a ceiling that
+ * sits one window above the largest known case is a ceiling that will bite
+ * again on the next chart.
+ */
+export const MAX_STORY_WINDOWS = 120;
 
 export const StoryWindowsRequestSchema = z
   .object({

@@ -72,19 +72,46 @@ function run(config: FunnelConfig): FunnelResult {
 
 describe('density against the stated target', () => {
   /**
-   * Measured over 30 years with the real implementation: default 1.42,
+   * Measured over this window with the real implementation: default 2.20,
    * prototype 1.61, strict 1.58.
    *
-   * The coarse daily simulation that tuned these reported 1.67, 1.90 and 1.90
-   * — consistently about 15% higher. The difference is the clustering: the
-   * simulation bucketed by round(day / 5), which splits a group that straddles
-   * a bucket boundary and inflates the count. Gap-based clustering merges
-   * correctly, so the real figures are slightly lower and more trustworthy.
+   * The default was 1.42 while the slow tier took hard aspects only. The
+   * ceiling moved with it, and the reason is recorded in
+   * src/domain/timescales.ts: an average inside the band was hiding gaps of
+   * nearly two years, and a reader lives in the gap rather than in the average.
    */
   it('keeps the default preset inside one to two windows per quarter', () => {
     const result = run(FUNNEL_DEFAULT);
     expect(result.windowsPerQuarter).toBeGreaterThan(0.7);
-    expect(result.windowsPerQuarter).toBeLessThan(2.2);
+    expect(result.windowsPerQuarter).toBeLessThan(2.6);
+  });
+
+  /**
+   * The assertion the density target could not make.
+   *
+   * This is why the default changed. Density inside the band said the funnel
+   * was well tuned while the chart it was tuned on had a 1.9-year silence
+   * across the present day: opening the app in August 2026 gave zero key dates
+   * within six months in either direction, and the screen that exists to
+   * prepare someone for what is coming had nothing to show.
+   *
+   * An average cannot catch that and a maximum gap can, so the maximum gap is
+   * what is pinned. Fifteen months is loose enough that a genuinely quiet
+   * stretch of sky does not fail the suite, and tight enough that the silence
+   * this was written for — 1.9 years — would.
+   */
+  it('never leaves a gap longer than fifteen months between key dates', () => {
+    const days = run(FUNNEL_DEFAULT)
+      .windows.map((w) => w.peak.keyJd)
+      .sort((a, b) => a - b);
+
+    let worst = 0;
+    for (let i = 1; i < days.length; i += 1) {
+      worst = Math.max(worst, (days[i] ?? 0) - (days[i - 1] ?? 0));
+    }
+
+    expect(days.length).toBeGreaterThan(1);
+    expect(worst / 30.44).toBeLessThan(15);
   });
 
   it('keeps the prototype preset inside the same range', () => {
@@ -212,7 +239,13 @@ describe('a path carries its whole chain', () => {
     // same density.
     expect(FUNNEL_DEFAULT.slow.bodies).toContain('pluto');
     expect(FUNNEL_DEFAULT.slow.bodies).toContain('chiron');
-    expect(FUNNEL_DEFAULT.slow.aspects).not.toContain('trine');
-    expect(FUNNEL_DEFAULT.slow.aspects).not.toContain('sextile');
+    // The slow tier took hard aspects only, so that both bodies could be
+    // admitted at a 1-degree orb without the density running away. It now
+    // takes all five. What that bought is a floor: across the panel the
+    // quietest chart went from 0.18 windows a quarter — seven in a decade —
+    // to 0.95, because a soft aspect reaches a concentrated natal axis from
+    // zodiacal regions a hard one cannot.
+    expect(FUNNEL_DEFAULT.slow.aspects).toContain('trine');
+    expect(FUNNEL_DEFAULT.slow.aspects).toContain('sextile');
   });
 });

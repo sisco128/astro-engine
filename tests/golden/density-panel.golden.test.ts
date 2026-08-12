@@ -8,50 +8,59 @@
  * answer is that it is some of both.
  *
  * Measured, FUNNEL_DEFAULT over each chart's age-20-to-30 window
- * (scripts/measure-density-panel.ts reproduces every number):
+ * (scripts/measure-density-panel.ts reproduces every number). Both columns are
+ * kept because the second exists BECAUSE of the first — the "was" is the
+ * restricted slow tier this file used to document:
  *
- *   chart              stories  windows  per quarter  path shapes
- *   rome-1987                7       49         1.23           52
- *   madrid-2000              4       66         1.65           67
- *   wellington-1973         12       32         0.80           33
- *   helsinki-1955            4       21         0.53           23
- *   paris-1945               5       24         0.60           34
- *   mexico-city-1968         3       30         0.75           38
- *   buenos-aires-1975        6       34         0.85           42
- *   london-1962              7        7         0.18            7
- *   quito-1995               6      107         2.68           99
- *   tokyo-2010               3       42         1.05           30
+ *   chart              stories  windows  per quarter   was
+ *   rome-1987                7       88         2.20   1.23
+ *   madrid-2000              4       72         1.80   1.65
+ *   wellington-1973         12       62         1.55   0.80
+ *   helsinki-1955            4       50         1.25   0.53
+ *   paris-1945               5       33         0.83   0.60
+ *   mexico-city-1968         3       37         0.93   0.75
+ *   buenos-aires-1975        6       56         1.40   0.85
+ *   london-1962              7       38         0.95   0.18
+ *   quito-1995               6      164         4.10   2.68
+ *   tokyo-2010               3       55         1.38   1.05
  *
- *   min 0.18   median 0.83   mean 1.03   max 2.68
+ *   min 0.83   median 1.39   mean 1.64   max 4.10
+ *
+ * The point of the change is the first column, not the last: the floor moves
+ * from 0.18 to 0.83 and the median from below the target into it. london-1962
+ * at 0.18 was seven key windows in a decade — the funnel had almost nothing to
+ * say about that person for ten years — and it is now 38.
  *
  * Three things follow, and the assertions below are those three things.
  *
- * 1. The spread is fifteen-fold. On Rome alone the funnel looked stable: 1.23,
- *    1.45, 1.58 and 1.15 windows per quarter over four consecutive decades.
- *    Across the panel on a single decade it runs 0.18 to 2.68.
+ * 1. The spread is fivefold, down from fifteen. A chart-to-chart range is
+ *    inherent — some skies are busier than others — but a fifteen-fold spread
+ *    meant the quiet end was not sparse, it was silent.
  *
- * 2. The target band is met by eight of ten. That is the honest version of
+ * 2. The target band is met by nine of ten. That is the honest version of
  *    "the preset hits one to two per quarter" — it is a statement about the
  *    middle of a distribution, not about a chart.
  *
- * 3. The centre sits BELOW the target, at a median of 0.83. Rome, the chart
- *    the target was set on, is in the upper half of the panel. Nothing here
- *    retunes the preset — retuning against ten charts is its own piece of work
- *    and would invalidate every measurement recorded so far — but the number
- *    is asserted so the next person cannot re-derive the target from Rome
- *    without meeting this.
+ * 3. The centre now sits INSIDE the target, at a median of 1.39. This file
+ *    used to record the opposite and say so plainly: "the centre sits BELOW
+ *    the target, at a median of 0.83 … nothing here retunes the preset —
+ *    retuning against ten charts is its own piece of work". This is that piece
+ *    of work, and what forced it was not the panel but a live screen: on the
+ *    chart the target was set on, opening the app in August 2026 gave zero key
+ *    dates within six months either way.
  *
  * The two charts outside the band were investigated before the bounds were
  * widened for them, and both are the sky rather than the fixture:
  *
- *   london-1962 at 0.18 — the natal points sit in one Aquarius-Leo axis, so
- *     hard aspects from the slow bodies can only arrive from two zodiacal
- *     regions. Across 1982-1992 that happens in two short epochs (Chiron early
- *     1982, Pluto through 1988-89) and Jupiter and Saturn are elsewhere for
- *     most of both. The same chart measures 0.88, 0.85 and 0.45 over the three
- *     following decades — the drought is the decade, not the chart.
+ *   london-1962, once 0.18 and now 0.95 — the natal points sit in one
+ *     Aquarius-Leo axis, so aspects from the slow bodies can only arrive from
+ *     a few zodiacal regions. When the slow tier took hard aspects only, those
+ *     regions were two, and across 1982-1992 they were reached in two short
+ *     epochs while Jupiter and Saturn were elsewhere for most of both. Trines
+ *     and sextiles reach that axis from four more regions, which is precisely
+ *     why admitting them lifts the floor rather than merely adding noise.
  *
- *   quito-1995 at 2.68 — the opposite face of the same effect. Its window,
+ *   quito-1995 at 4.10 — the opposite face of the same effect. Its window,
  *     2015-2025, is when transiting Uranus squares its own natal position and
  *     Chiron opposes its own, both of which are age-locked and both of which
  *     land on stories that also carry Sun, Venus and Saturn. It decays to 2.08,
@@ -99,18 +108,22 @@ beforeAll(() => {
 /**
  * The bounds every chart in the panel must satisfy.
  *
- * Derived from the measurements above and nothing else. The floor is a fifth
- * below the measured minimum of 0.18; the ceiling a sixth above the measured
- * maximum of 2.68. Both are stated in units that mean something rather than as
- * a percentage margin: below 0.15 a chart yields fewer than six key windows in
- * a decade, at which point the funnel has stopped describing a life; above 3.1
- * it yields more than one a month, at which point it has stopped choosing.
+ * Derived from the measurements above and nothing else. The floor sits below
+ * the measured minimum of 0.83, the ceiling above the measured maximum of
+ * 4.10. Both are stated in units that mean something rather than as a
+ * percentage margin: below 0.5 a chart yields fewer than twenty key windows in
+ * a decade, which is one every six months and the point at which the funnel
+ * stops describing a life; above 4.5 it yields more than one a month, at which
+ * point it has stopped choosing.
+ *
+ * The floor is where the real tightening happened — it was 0.15, chosen to
+ * accommodate a chart measuring 0.18. Nothing may be that quiet now.
  *
  * Widening either of these is a re-calibration, not a fix. The measured value
  * that justified the change belongs in this comment before the number moves.
  */
-const PANEL_FLOOR = 0.15;
-const PANEL_CEILING = 3.1;
+const PANEL_FLOOR = 0.5;
+const PANEL_CEILING = 4.5;
 
 /** The stated target, unchanged from tests/golden/funnel.golden.test.ts. */
 const TARGET_LOW = 0.5;
@@ -174,20 +187,23 @@ describe('FUNNEL_DEFAULT density on every chart in the panel', () => {
   }
 
   it('never goes silent: every chart yields key windows and more than one shape', () => {
-    // The weakest chart in the panel still produces seven windows across seven
-    // distinct path shapes in a decade. A chart at zero would mean the funnel
-    // had nothing to say about someone, which is a different failure from
-    // being sparse and is worth separating.
+    // The weakest chart in the panel now produces 33 windows across 44 shapes
+    // in a decade. It produced seven, and this floor was five — a bound set to
+    // accommodate the silence rather than to forbid it.
+    //
+    // Twenty-five is one window every five months on the weakest chart. Below
+    // that the funnel has stopped describing a life, which is a different
+    // failure from being sparse and is worth separating.
     for (const chart of REFERENCE_CHARTS) {
       const { windows, shapes } = measure(chart);
-      expect(windows).toBeGreaterThanOrEqual(5);
-      expect(shapes).toBeGreaterThanOrEqual(5);
+      expect(windows).toBeGreaterThanOrEqual(25);
+      expect(shapes).toBeGreaterThanOrEqual(25);
     }
   });
 
   it('keeps the Rome reference inside the bounds the funnel golden asserts', () => {
-    // Chart 1 is the continuity anchor. Measured at 1.23 over this ten-year
-    // window; the funnel golden asserts the same chart against 0.7 to 2.2 and
+    // Chart 1 is the continuity anchor. Measured at 2.20 over this ten-year
+    // window; the funnel golden asserts the same chart against 0.7 to 2.6 and
     // must keep agreeing with the panel about it.
     const rome = REFERENCE_CHARTS[0];
     expect(rome?.id).toBe('rome-1987');
@@ -195,44 +211,50 @@ describe('FUNNEL_DEFAULT density on every chart in the panel', () => {
 
     const { perQuarter } = measure(rome);
     expect(perQuarter).toBeGreaterThan(0.7);
-    expect(perQuarter).toBeLessThan(2.2);
+    expect(perQuarter).toBeLessThan(2.6);
   });
 });
 
 describe('the target band, as a statement about ten charts', () => {
-  it('holds on eight of the ten, and names the two it does not', () => {
+  it('holds on nine of the ten, and names the one it does not', () => {
     const outside = REFERENCE_CHARTS.filter((chart) => {
       const { perQuarter } = measure(chart);
       return perQuarter < TARGET_LOW || perQuarter > TARGET_HIGH;
     }).map((chart) => chart.id);
 
-    // Asserted by name, not by count. If a third chart leaves the band, or a
+    // Asserted by name, not by count. If a second chart leaves the band, or a
     // different one does, that is a change in the model and the person making
-    // it should have to look at this list.
-    expect(outside.sort()).toEqual(['london-1962', 'quito-1995']);
+    // it should have to look at this list. london-1962 used to be on it at
+    // 0.18 and is now inside at 0.95.
+    expect(outside.sort()).toEqual(['quito-1995']);
   });
 
-  it('centres below the target it was tuned to, not inside it', () => {
+  it('centres inside the target, which it did not before', () => {
     const sorted = panel()
       .map((measured) => measured.perQuarter)
       .sort((a, b) => a - b);
     const median = ((sorted[4] ?? 0) + (sorted[5] ?? 0)) / 2;
 
-    // Measured 0.83, against a target whose floor is 1.0. The band here is
-    // wide because the claim being asserted is only "the centre is below the
-    // target, and not by an order of magnitude".
-    expect(median).toBeGreaterThan(0.6);
-    expect(median).toBeLessThan(1.0);
+    // Measured 1.39. This assertion used to run the other way — it asserted
+    // that the centre sat BELOW the target at 0.83, because that was true and
+    // worth pinning. It is the one number that says whether the preset suits
+    // ten skies or only the one it was tuned on.
+    expect(median).toBeGreaterThan(1.0);
+    expect(median).toBeLessThan(2.0);
   });
 
-  it('spans at least a tenfold range, which one chart could never show', () => {
+  it('still spreads several-fold, because skies differ', () => {
     const values = panel().map((measured) => measured.perQuarter);
     const low = Math.min(...values);
     const high = Math.max(...values);
 
-    // Measured 2.68 / 0.18 = 14.9. This is the finding the panel exists for:
-    // Rome's own decade-to-decade range is 1.15 to 1.58, a factor of 1.4.
-    expect(high / low).toBeGreaterThan(10);
+    // Measured 4.10 / 0.83 = 4.9, down from 14.9. The spread is real and not
+    // a defect — some decades are busier than others, and Rome's own
+    // decade-to-decade range is a factor of 1.4, so one chart could never
+    // show it. What was a defect was the bottom of that range: a chart at
+    // 0.18 was not sparse, it was silent.
+    expect(high / low).toBeGreaterThan(3);
+    expect(high / low).toBeLessThan(8);
   });
 });
 

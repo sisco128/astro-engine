@@ -188,7 +188,10 @@ describe('the funnel comes back whole', () => {
   it('echoes the resolved preset, so nothing has to be guessed', () => {
     expect(base.funnel.requested).toBe('funnel.default');
     expect(base.funnel.resolved.slow.bodies).toContain('pluto');
-    expect(base.funnel.resolved.slow.aspects).not.toContain('trine');
+    // The slow tier takes all five aspects. It took the hard three, and the
+    // change is recorded in src/domain/timescales.ts: an average density
+    // inside the target was hiding gaps of nearly two years.
+    expect(base.funnel.resolved.slow.aspects).toContain('trine');
   });
 
   it('scores stories with v2 by default', () => {

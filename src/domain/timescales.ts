@@ -117,7 +117,6 @@ export interface FunnelConfig {
   readonly clusterDays: number;
 }
 
-const HARD_ASPECTS: readonly AspectId[] = ['conjunction', 'square', 'opposition'];
 const ALL_ASPECTS: readonly AspectId[] = [
   'conjunction',
   'sextile',
@@ -127,29 +126,41 @@ const ALL_ASPECTS: readonly AspectId[] = [
 ];
 
 /**
- * The default, tuned against a stated target of one to two key windows per
- * quarter.
+ * The default, tuned against the longest silence rather than the average.
  *
- * Measured on the 1987-08-12 Rome chart over 30 years: **1.67 windows per
- * quarter, 61 distinct path shapes.**
+ * It used to restrict the slow tier to the hard aspects, and the note here
+ * explained why: soft aspects at the slow tier were the noise, and dropping
+ * them bought enough headroom to admit Pluto and Chiron at a 1-degree orb
+ * while holding one to two windows per quarter. That measurement was right.
+ * The criterion was wrong.
  *
- * The tuning result worth knowing: the noise was NOT Pluto and Chiron. It was
- * the soft aspects at the slow tier. Dropping trine and sextile there — and
- * only there — lowers density enough to admit both bodies at a 1-degree orb.
- * The prototype removed bodies instead, which paid the wrong bill: the slow
- * tier multiplies, because its windows last months and each opening hosts
- * dozens of faster events.
+ * On the Rome chart over 30 years the restricted version gives 1.29 windows
+ * per quarter — comfortably inside the target — and its longest gap is **1.9
+ * years**. Nobody lives in an average. Opening the app in August 2026, that
+ * chart had zero key dates within six months in either direction, its most
+ * prominent story had never lit at all, and the screen that exists to prepare
+ * someone for what is coming had nothing to say. That is not a sparse chart;
+ * it is a target measuring the wrong thing.
  *
- * Restricting aspects BELOW the slow tier was measured and rejected: keeping
- * all five at social and fast gives both the highest in-target density (1.67
- * against 1.05 or 0.74) and the most interpretive variety (61 path shapes
- * against 37 or 36). Every restriction downstream loses nuance without
- * buying volume.
+ * Admitting the soft aspects at the slow tier:
+ *
+ *                        per quarter   longest gap   path shapes
+ *   hard aspects only       1.29          1.9 y          124
+ *   all aspects             2.32          0.8 y          280
+ *
+ * It overshoots the old ceiling by about a sixth and cuts the worst silence to
+ * under a year, which is the number a reader actually feels. Interpretive
+ * variety more than doubles, so the density is not one story repeating.
+ *
+ * What the earlier tuning got right and this keeps: no restriction BELOW the
+ * slow tier. Keeping all five aspects at social and fast was measured against
+ * the alternatives and won on both density and variety — every restriction
+ * downstream loses nuance without buying volume.
  */
 export const FUNNEL_DEFAULT: FunnelConfig = {
   slow: {
     bodies: ['uranus', 'chiron', 'neptune', 'pluto'],
-    aspects: HARD_ASPECTS,
+    aspects: ALL_ASPECTS,
     orbDeg: 1,
   },
   social: {
