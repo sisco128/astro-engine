@@ -284,7 +284,33 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       if (typeof presented === 'string' && matches(presented, apiKeyDigests)) {
         // The digest, never the key itself. This value lives in an in-memory
         // store and appears in the log line written when a caller is limited.
-        return `key:${digestOf(presented).toString('base64url').slice(0, 16)}`;
+        const bucket = `key:${digestOf(presented).toString('base64url').slice(0, 16)}`;
+
+        /**
+         * One bucket per reader, inside the key.
+         *
+         * The key alone was the finest bucket available, and for a frontend
+         * that is one bucket for its whole audience: every person using
+         * Navigate arrives with the same key, so the allowance was shared by
+         * all of them at once. A single pass through the app spends a few
+         * dozen calls, which made the second reader in any given minute the
+         * one who got turned away — with a screen that says something broke,
+         * because nothing distinguishes "slow down" from "broken" out there.
+         *
+         * The subdivision is safe only because it hangs off a validated key:
+         * the reader id is attacker-controlled, so on its own it would be the
+         * same escape hatch the check above exists to prevent. Nested under a
+         * key that had to be right, the worst a forged id can do is split an
+         * allowance its owner already had.
+         *
+         * Opaque on purpose — a guest session id does the job, and nothing
+         * here wants to know more about who is reading.
+         */
+        const reader = request.headers['x-caller-id'];
+        if (typeof reader === 'string' && reader.trim() !== '') {
+          return `${bucket}/reader:${reader.trim().slice(0, 64)}`;
+        }
+        return bucket;
       }
       return `ip:${request.ip}`;
     },

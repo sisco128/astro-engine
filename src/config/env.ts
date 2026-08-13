@@ -185,7 +185,19 @@ export const env = Object.freeze({
    */
   authOptional: bool('AUTH_OPTIONAL', false),
 
-  rateLimitPerMinute: int('RATE_LIMIT_PER_MINUTE', 60),
+  /**
+   * Richieste al minuto, per secchio — e un secchio è una chiave API, o un
+   * lettore dentro quella chiave se il chiamante lo dichiara. Vedi il
+   * `keyGenerator` in http/app.ts.
+   *
+   * 60 era il numero di quando il secchio più fine disponibile era la chiave:
+   * tutte le persone che usano un frontend ne condividevano uno. Un solo giro
+   * dell'app — onboarding, orizzonte, una storia con le sue schede — ne consuma
+   * qualche decina, quindi la seconda persona nello stesso minuto trovava la
+   * porta chiusa. Adesso che il conto scende al lettore, 240 è largo per uno e
+   * stretto per chi provasse a raschiare.
+   */
+  rateLimitPerMinute: int('RATE_LIMIT_PER_MINUTE', 240),
 
   /**
    * Geocoding upstream for GET /v1/geo/search.
