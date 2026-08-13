@@ -150,10 +150,27 @@ export function calculateChart(request: ChartRequest): Chart {
     };
   });
 
-  // `natal.default` because that is what a natal chart means here. The transit
-  // policies are tighter and belong to the funnel, not to the chart.
+  /**
+   * `natal.default` because that is what a natal chart means here. The transit
+   * policies are tighter and belong to the funnel, not to the chart.
+   *
+   * The angles take part, and leaving them out was a real gap rather than a
+   * simplification: `identifyStories` builds stories over the Ascendant and
+   * the Midheaven, so a story could name a member this list could never
+   * explain. On the reference chart that showed as a row reading "Ascendente"
+   * with nothing after it — the Ascendant really is trine Chiron at 6.7°, and
+   * the screen had no way to know.
+   *
+   * No `lonSpeed` for them, which `AspectPoint` already allows and says why:
+   * the Ascendant moves with the Earth's rotation, and calling that "applying"
+   * would be a category error rather than a useful number.
+   */
   const aspects = aspectsAmong(
-    bodies.map((body) => ({ id: body.id, lon: body.lon, lonSpeed: body.lonSpeed })),
+    [
+      ...bodies.map((body) => ({ id: body.id, lon: body.lon, lonSpeed: body.lonSpeed })),
+      { id: 'ascendant', lon: houses.ascendant },
+      { id: 'midheaven', lon: houses.midheaven },
+    ],
     ORB_POLICIES['natal.default'],
   );
 

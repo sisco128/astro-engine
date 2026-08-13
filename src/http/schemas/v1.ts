@@ -20,6 +20,18 @@ import { BirthTimeAssumptionSchema, WhenSchema } from './when.js';
 const houseSystemLetters = Object.keys(HOUSE_SYSTEMS) as [string, ...string[]];
 
 export const BodyIdSchema = z.enum(BODY_IDS);
+
+/**
+ * A body, or one of the two angles a story can converge on.
+ *
+ * Not `BodyIdSchema` plus a free string: the Ascendant and the Midheaven are
+ * the only two non-bodies the engine ever names, and enumerating them keeps a
+ * typo in a client a 400 rather than a silent miss.
+ */
+export const PointIdSchema = z.enum([...BODY_IDS, 'ascendant', 'midheaven'] as [
+  string,
+  ...string[],
+]);
 export const HouseSystemSchema = z.enum(houseSystemLetters);
 
 export const ChartRequestSchema = z
@@ -95,8 +107,13 @@ export const ChartResponseSchema = z.object({
    */
   aspects: z.array(
     z.object({
-      a: BodyIdSchema,
-      b: BodyIdSchema,
+      /**
+       * A body or an angle. The angles are here because stories are built on
+       * them: a client showing "why is the Ascendant in this story" needs the
+       * aspect that put it there, and for a while there was no way to answer.
+       */
+      a: PointIdSchema,
+      b: PointIdSchema,
       aspect: z.enum(ASPECT_IDS as [string, ...string[]]),
       exactAngle: z.number(),
       separation: z.number(),

@@ -658,7 +658,9 @@
                               "trueNode",
                               "meanNode",
                               "lilith",
-                              "chiron"
+                              "chiron",
+                              "ascendant",
+                              "midheaven"
                             ]
                           },
                           "b": {
@@ -677,7 +679,9 @@
                               "trueNode",
                               "meanNode",
                               "lilith",
-                              "chiron"
+                              "chiron",
+                              "ascendant",
+                              "midheaven"
                             ]
                           },
                           "aspect": {

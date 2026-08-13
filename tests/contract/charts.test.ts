@@ -375,9 +375,17 @@ describe('the natal aspects', () => {
 
     expect(body.aspects.length).toBeGreaterThan(0);
 
+    // Every end is a point this same response describes: a body in `bodies`,
+    // or one of the two angles in `angles`. The angles were added because
+    // stories are built on them and the list could not explain a story that
+    // named one; this assertion used to allow bodies only, which is how that
+    // gap stayed invisible.
+    const named = (id: string): boolean =>
+      body.bodies.some((entry) => entry.id === id) || id === 'ascendant' || id === 'midheaven';
+
     for (const aspect of body.aspects) {
-      expect(body.bodies.some((entry) => entry.id === aspect.a)).toBe(true);
-      expect(body.bodies.some((entry) => entry.id === aspect.b)).toBe(true);
+      expect(named(aspect.a)).toBe(true);
+      expect(named(aspect.b)).toBe(true);
       // Inside the policy's widest orb, and never negative.
       expect(aspect.orb).toBeGreaterThanOrEqual(0);
       expect(aspect.orb).toBeLessThanOrEqual(10);
@@ -410,5 +418,44 @@ describe('the natal aspects', () => {
     const separation = raw > 180 ? 360 - raw : raw;
 
     expect(Math.abs(separation - sample.exactAngle)).toBeCloseTo(sample.orb, 6);
+  });
+});
+
+describe('the angles take part in the aspect list', () => {
+  /**
+   * `identifyStories` builds stories over the Ascendant and the Midheaven, so
+   * a story can name a member the aspect list could not explain. On the
+   * reference chart that reached a screen as a row reading "Ascendente" with
+   * nothing after it — while the Ascendant really is trine Chiron at 6.7°.
+   *
+   * A chart that cannot say why one of its own stories contains a point is a
+   * chart with a hole in it, not a simpler chart.
+   */
+  it('names the Ascendant’s aspects, so a story can explain itself', async () => {
+    const response = await postChart(ROME_1987);
+    expect(response.statusCode).toBe(200);
+
+    const body = response.json<{
+      aspects: { a: string; b: string; aspect: string; orb: number }[];
+    }>();
+    const angled = body.aspects.filter((x) => x.a === 'ascendant' || x.b === 'ascendant');
+
+    expect(angled.length).toBeGreaterThan(0);
+    // Every one carries the number a reader checks it by.
+    for (const aspect of angled) expect(aspect.orb).toBeGreaterThanOrEqual(0);
+  });
+
+  it('does not claim an angle is applying', async () => {
+    // The Ascendant moves with the Earth's rotation. Calling that "applying"
+    // would be a category error rather than a useful number, which is why
+    // AspectPoint makes lonSpeed optional in the first place.
+    const response = await postChart(ROME_1987);
+    const body = response.json<{ aspects: { a: string; b: string; applying?: boolean }[] }>();
+
+    for (const aspect of body.aspects) {
+      if (aspect.a === 'ascendant' || aspect.b === 'ascendant') {
+        expect(aspect.applying).toBeUndefined();
+      }
+    }
   });
 });
