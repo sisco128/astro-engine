@@ -8,11 +8,19 @@
  * route the app actually registers, that its request bodies are real JSON
  * Schema derived from the validating zod schemas rather than empty objects,
  * and that the version it advertises is the version a live call returns.
+ *
+ * Since the document became a committed artifact these tests also guard the
+ * copy on disk. A client that generates its types from docs/openapi.json is
+ * only as safe as the promise that the file is what the engine serves, and
+ * that promise is kept here or nowhere.
  */
+
+import { readFile } from 'node:fs/promises';
 
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { ASPECTS } from '../../src/domain/orb-policy.js';
 import { useRepoEphemeris } from '../helpers/ephem-path.js';
 
 useRepoEphemeris();
@@ -70,6 +78,7 @@ interface JsonSchema {
   minimum?: number;
   maximum?: number;
   default?: unknown;
+  const?: unknown;
   $ref?: string;
   $schema?: string;
 }
@@ -426,6 +435,52 @@ describe('responses', () => {
     for (const key of error?.required ?? []) {
       expect(body.error).toHaveProperty(key);
     }
+  });
+});
+
+describe('the aspect table is published rather than left to the clients', () => {
+  it('carries every aspect the domain defines, at the angle the domain defines', () => {
+    // The table is vocabulary rather than wire shape, and it is in the
+    // document because the alternative was measured: navigate.fyi typed its
+    // own copy of these nine numbers and nothing compared the two. Read from
+    // ASPECTS here as well as there, so what this asserts is the conversion,
+    // not the values.
+    const angles = doc.components.schemas['AspectAngles'];
+
+    expect(Object.keys(angles?.properties ?? {})).toEqual(Object.keys(ASPECTS));
+    expect(angles?.required).toEqual(Object.keys(ASPECTS));
+
+    // A generator must read a literal here, not `number`: an angle a client is
+    // free to invent is an angle it will eventually invent wrongly.
+    for (const [id, aspect] of Object.entries(ASPECTS)) {
+      expect(angles?.properties?.[id]?.const, id).toBe(aspect.angle);
+    }
+  });
+});
+
+describe('docs/openapi.json is the copy clients pin to', () => {
+  it('is the document this engine serves', async () => {
+    // What gives a wire-shape change a diff somebody reads. Without it the
+    // committed copy is a snapshot of whatever the engine looked like the last
+    // time someone remembered to run the script, and a client pinning to it
+    // inherits that staleness in silence — which is precisely what the
+    // hand-maintained types were.
+    const committed: unknown = JSON.parse(
+      await readFile(new URL('../../docs/openapi.json', import.meta.url), 'utf8'),
+    );
+
+    // Parsed again from the served bytes instead of reusing `doc`: several
+    // tests above call .sort() on that object's own `required` arrays while
+    // asserting against them, so by the time this runs `doc` is no longer what
+    // the engine sent. Re-reading one string is cheaper than making this
+    // assertion depend on the order the file happens to run in.
+    const served: unknown = JSON.parse(raw);
+
+    expect(
+      committed,
+      'docs/openapi.json is stale. Run `pnpm contract:emit` and commit the diff alongside the ' +
+        'change that caused it: navigate.fyi generates its wire types from that file.',
+    ).toEqual(served);
   });
 });
 

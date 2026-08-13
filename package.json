@@ -16,6 +16,7 @@
     "ephem:seed": "node scripts/seed-manifest.mjs",
     "ephem:fetch": "tsx scripts/fetch-ephemeris.ts",
     "ephem:verify": "tsx scripts/verify-ephemeris.ts",
+    "contract:emit": "tsx scripts/emit-openapi.ts",
     "test": "vitest run tests/unit tests/contract --passWithNoTests",
     "test:golden": "vitest run tests/golden",
     "test:all": "vitest run --passWithNoTests",

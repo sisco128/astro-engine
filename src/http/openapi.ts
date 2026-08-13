@@ -26,10 +26,24 @@
  * schemas become worth writing when a client generator actually needs them, at
  * which point the handlers should be refactored to emit *through* them rather
  * than merely be mirrored by them.
+ *
+ * `components.schemas` also carries the aspect table, which is vocabulary
+ * rather than wire shape. It is here because a document that describes only
+ * the shapes leaves a client one table short of being able to check a number,
+ * and the table it then types by hand is the copy that rots — navigate.fyi's
+ * `src/lib/contract/` carried one, together with a list of error codes in
+ * which eight of fourteen named nothing this engine has ever returned.
+ *
+ * The document is committed to `docs/openapi.json` by `pnpm contract:emit`,
+ * and tests/contract/openapi.test.ts fails when that file and this code
+ * disagree. That is what makes a wire-shape change visible in review instead
+ * of only at a client's runtime, and it is what clients pin to: reading a
+ * committed file needs no engine running.
  */
 
 import { z } from 'zod';
 
+import { ASPECTS } from '../domain/orb-policy.js';
 import { DEFAULT_LIMIT, MAX_LIMIT } from '../geo/search.js';
 import { ENGINE_VERSION } from '../version.js';
 import { KeyDatesRequestSchema, StoryWindowsRequestSchema } from './schemas/funnel.js';
@@ -105,6 +119,38 @@ const UNAUTHORIZED = errorResponse(
  * `security` requirement.
  */
 const PUBLIC: Record<string, unknown> = { security: [] };
+
+/**
+ * The aspect table, published as part of the contract.
+ *
+ * Built from src/domain/orb-policy.ts rather than restated, so the angles a
+ * client checks an orb against are the same numbers the engine measured it
+ * with. Orbs are deliberately absent: they vary by policy and by tier, they
+ * are already echoed in the responses that apply them, and a single table of
+ * them here would be true of nothing.
+ *
+ * `const` per property rather than one big `default`, because that is how JSON
+ * Schema says "this value and no other" — a generator reads it as a literal
+ * type, and a client that generates from this document cannot end up with a
+ * trine at 130 degrees.
+ */
+function aspectAngles(): Record<string, unknown> {
+  return {
+    type: 'object',
+    description:
+      'The exact angle of every aspect the engine names, in degrees. The keys are the aspect ' +
+      'identifiers that appear in `aspects[].aspect` on POST /v1/charts and in the funnel ' +
+      'configuration of the transit endpoints.',
+    additionalProperties: false,
+    required: Object.keys(ASPECTS),
+    properties: Object.fromEntries(
+      Object.entries(ASPECTS).map(([id, aspect]) => [
+        id,
+        { type: 'number', const: aspect.angle, description: `${id}: ${String(aspect.angle)}°.` },
+      ]),
+    ),
+  };
+}
 
 /**
  * Build the document.
@@ -419,6 +465,13 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         },
       },
       schemas: {
+        // Vocabulary, not wire shape, and the only entry here no operation
+        // references: nobody sends or receives this object. It is published
+        // because a client that draws a chart needs the angles before it has
+        // asked for one, and the alternative — every client typing the table
+        // itself — is the duplication this project spent a phase removing.
+        AspectAngles: aspectAngles(),
+
         // Documented once and referenced everywhere. The envelope is frozen at
         // /v1: every non-2xx response from every endpoint has this shape, and
         // a client can write one error path rather than nine.

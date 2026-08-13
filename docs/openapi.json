@@ -1,0 +1,1993 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "astro-engine",
+    "version": "0.1.0",
+    "description": "High-precision astrological calculation engine over Swiss Ephemeris. The engine returns numbers and identifiers only — formatted degrees, glyphs, sign names and interpretive text are presentation, and belong to the clients.",
+    "license": {
+      "name": "AGPL-3.0-or-later",
+      "identifier": "AGPL-3.0-or-later"
+    }
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "The server this document was fetched from."
+    }
+  ],
+  "security": [
+    {
+      "apiKey": []
+    }
+  ],
+  "paths": {
+    "/v1/health": {
+      "get": {
+        "security": [],
+        "operationId": "getHealth",
+        "summary": "Liveness",
+        "description": "Dependency-free. Answers while a heavy calculation is in flight, which is how the engine demonstrates its event loop is not blocked. Not a readiness check: it says nothing about whether a calculation would succeed.",
+        "responses": {
+          "200": {
+            "description": "The process is alive: `{ \"status\": \"ok\" }`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "The process is alive: `{ \"status\": \"ok\" }`."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ready": {
+      "get": {
+        "security": [],
+        "operationId": "getReady",
+        "summary": "Readiness",
+        "description": "Whether calculations can actually succeed: ephemeris state, library version, probe result, measured coverage, and compute-pool state. 503 until all of it is up.",
+        "responses": {
+          "200": {
+            "description": "Ephemeris and compute pool are ready.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Ephemeris and compute pool are ready."
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not ready. Same shape as the 200, with the failing state named.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Not ready. Same shape as the 200, with the failing state named."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/meta/license": {
+      "get": {
+        "security": [],
+        "operationId": "getLicense",
+        "summary": "Licence and source location",
+        "description": "AGPL-3.0 §13 obliges anyone running this service over a network to offer its users the Corresponding Source; this endpoint is how they find it. Never requires a key.",
+        "responses": {
+          "200": {
+            "description": "Licence identifier, public source URL, and dependency notices.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Licence identifier, public source URL, and dependency notices."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/meta/stats": {
+      "get": {
+        "operationId": "getStats",
+        "summary": "Operational counters",
+        "description": "Cache hits, misses and entry count; compute-pool readiness and queue depth; process uptime in seconds. Numbers only — no request content, no configuration, and no process memory figures.",
+        "responses": {
+          "200": {
+            "description": "Counters: `{ cache: { hits, misses, size }, pool: { ready, queueDepth }, process: { uptimeSeconds } }`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Counters: `{ cache: { hits, misses, size }, pool: { ready, queueDepth }, process: { uptimeSeconds } }`."
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No `x-api-key` header, or one that matches no configured key (UNAUTHORIZED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/meta/funnel": {
+      "get": {
+        "operationId": "getFunnelVocabulary",
+        "summary": "Funnel vocabulary",
+        "description": "Tiers, presets, aspect identifiers, nesting rules and limits — everything a client needs to build the `funnel` field of POST /v1/transits/key-dates and POST /v1/transits/story-windows without guessing, including the latter default span and window ceiling.",
+        "responses": {
+          "200": {
+            "description": "The funnel configuration vocabulary.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "The funnel configuration vocabulary."
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No `x-api-key` header, or one that matches no configured key (UNAUTHORIZED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/meta/life-phases": {
+      "get": {
+        "operationId": "getLifePhases",
+        "summary": "Life-phase vocabulary",
+        "description": "The whole chart-independent catalogue, including phases a given chart never reaches inside its horizon. A client drawing a timeline needs the phases that exist, not only the ones a particular request happened to produce.",
+        "responses": {
+          "200": {
+            "description": "The life-phase catalogue, keyed by body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "The life-phase catalogue, keyed by body."
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No `x-api-key` header, or one that matches no configured key (UNAUTHORIZED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/geo/search": {
+      "get": {
+        "operationId": "searchPlaces",
+        "summary": "Place name to coordinates and IANA zone",
+        "description": "Resolves a place name against OpenStreetMap Nominatim and attaches the IANA time zone at each result, so a client gets the three things POST /v1/charts needs — latitude, longitude and zone — from one call instead of assembling them itself. The zone lookup is offline and deterministic. Results are cached on the normalised query; `X-Cache` reports hit or miss.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "description": "The place to look for, e.g. \"Roma\" or \"New York, NY\". Trimmed, lower-cased and whitespace-collapsed before it is sent upstream or cached.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "How many candidates to return. The engine always fetches the maximum from the upstream and slices, so asking for fewer costs the same and asking again for more is free.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10,
+              "default": 5
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Candidate places, each with coordinates and an IANA zone.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "lat": {
+                            "type": "number"
+                          },
+                          "lon": {
+                            "type": "number"
+                          },
+                          "zone": {
+                            "type": "string"
+                          },
+                          "countryCode": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["name", "lat", "lon", "zone"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["results"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing or empty `q`, a `q` longer than the limit, an unknown query parameter, or a `limit` outside its range (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No `x-api-key` header, or one that matches no configured key (UNAUTHORIZED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The geocoding upstream timed out, refused the request, or answered with something other than the expected shape (GEO_UPSTREAM_FAILED). Nothing else in the engine is affected: no other endpoint calls it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/charts": {
+      "post": {
+        "operationId": "createChart",
+        "summary": "Natal chart",
+        "description": "Positions, angles and house cusps for a birth moment. The response is a deterministic function of the request and carries a strong ETag equal to its own `chartRef`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "when": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "utc": {
+                            "type": "object",
+                            "properties": {
+                              "year": {
+                                "type": "integer",
+                                "minimum": -12000,
+                                "maximum": 16000
+                              },
+                              "month": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 12
+                              },
+                              "day": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 31
+                              },
+                              "hour": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 23
+                              },
+                              "minute": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 59
+                              },
+                              "second": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 60
+                              }
+                            },
+                            "required": ["year", "month", "day", "hour", "minute"]
+                          }
+                        },
+                        "required": ["utc"]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "local": {
+                            "type": "object",
+                            "properties": {
+                              "year": {
+                                "type": "integer",
+                                "minimum": -12000,
+                                "maximum": 16000
+                              },
+                              "month": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 12
+                              },
+                              "day": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 31
+                              },
+                              "hour": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 23
+                              },
+                              "minute": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 59
+                              },
+                              "second": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 60
+                              },
+                              "zone": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": ["year", "month", "day", "hour", "minute", "zone"]
+                          }
+                        },
+                        "required": ["local"]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "localDate": {
+                            "type": "object",
+                            "properties": {
+                              "year": {
+                                "type": "integer",
+                                "minimum": -12000,
+                                "maximum": 16000
+                              },
+                              "month": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 12
+                              },
+                              "day": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 31
+                              },
+                              "zone": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": ["year", "month", "day", "zone"],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": ["localDate"]
+                      }
+                    ]
+                  },
+                  "geo": {
+                    "type": "object",
+                    "properties": {
+                      "lat": {
+                        "type": "number",
+                        "minimum": -90,
+                        "maximum": 90
+                      },
+                      "lon": {
+                        "type": "number",
+                        "minimum": -180,
+                        "maximum": 180
+                      }
+                    },
+                    "required": ["lat", "lon"]
+                  },
+                  "houseSystem": {
+                    "default": "P",
+                    "type": "string",
+                    "enum": ["P", "K", "O", "R", "C", "E", "W", "B", "M", "T"]
+                  },
+                  "bodies": {
+                    "default": [
+                      "sun",
+                      "moon",
+                      "mercury",
+                      "venus",
+                      "mars",
+                      "jupiter",
+                      "saturn",
+                      "uranus",
+                      "neptune",
+                      "pluto",
+                      "trueNode",
+                      "chiron"
+                    ],
+                    "minItems": 1,
+                    "maxItems": 40,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "sun",
+                        "moon",
+                        "mercury",
+                        "venus",
+                        "mars",
+                        "jupiter",
+                        "saturn",
+                        "uranus",
+                        "neptune",
+                        "pluto",
+                        "trueNode",
+                        "meanNode",
+                        "lilith",
+                        "chiron"
+                      ]
+                    }
+                  }
+                },
+                "required": ["when", "geo"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The calculated chart.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "chartRef": {
+                      "type": "string"
+                    },
+                    "engine": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "string"
+                        },
+                        "se": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["version", "se"],
+                      "additionalProperties": false
+                    },
+                    "jdUt": {
+                      "type": "number"
+                    },
+                    "utc": {
+                      "type": "string"
+                    },
+                    "geo": {
+                      "type": "object",
+                      "properties": {
+                        "lat": {
+                          "type": "number"
+                        },
+                        "lon": {
+                          "type": "number"
+                        }
+                      },
+                      "required": ["lat", "lon"],
+                      "additionalProperties": false
+                    },
+                    "bodies": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "enum": [
+                              "sun",
+                              "moon",
+                              "mercury",
+                              "venus",
+                              "mars",
+                              "jupiter",
+                              "saturn",
+                              "uranus",
+                              "neptune",
+                              "pluto",
+                              "trueNode",
+                              "meanNode",
+                              "lilith",
+                              "chiron"
+                            ]
+                          },
+                          "lon": {
+                            "type": "number"
+                          },
+                          "lat": {
+                            "type": "number"
+                          },
+                          "distAu": {
+                            "type": "number"
+                          },
+                          "lonSpeed": {
+                            "type": "number"
+                          },
+                          "retrograde": {
+                            "type": "boolean"
+                          },
+                          "house": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 12
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "lon",
+                          "lat",
+                          "distAu",
+                          "lonSpeed",
+                          "retrograde",
+                          "house"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "angles": {
+                      "type": "object",
+                      "properties": {
+                        "ascendant": {
+                          "type": "number"
+                        },
+                        "midheaven": {
+                          "type": "number"
+                        },
+                        "armc": {
+                          "type": "number"
+                        },
+                        "vertex": {
+                          "type": "number"
+                        },
+                        "equatorialAscendant": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "ascendant",
+                        "midheaven",
+                        "armc",
+                        "vertex",
+                        "equatorialAscendant"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "houses": {
+                      "type": "object",
+                      "properties": {
+                        "system": {
+                          "type": "string",
+                          "enum": ["P", "K", "O", "R", "C", "E", "W", "B", "M", "T"]
+                        },
+                        "cusps": {
+                          "minItems": 12,
+                          "maxItems": 12,
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          }
+                        }
+                      },
+                      "required": ["system", "cusps"],
+                      "additionalProperties": false
+                    },
+                    "aspects": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "a": {
+                            "type": "string",
+                            "enum": [
+                              "sun",
+                              "moon",
+                              "mercury",
+                              "venus",
+                              "mars",
+                              "jupiter",
+                              "saturn",
+                              "uranus",
+                              "neptune",
+                              "pluto",
+                              "trueNode",
+                              "meanNode",
+                              "lilith",
+                              "chiron"
+                            ]
+                          },
+                          "b": {
+                            "type": "string",
+                            "enum": [
+                              "sun",
+                              "moon",
+                              "mercury",
+                              "venus",
+                              "mars",
+                              "jupiter",
+                              "saturn",
+                              "uranus",
+                              "neptune",
+                              "pluto",
+                              "trueNode",
+                              "meanNode",
+                              "lilith",
+                              "chiron"
+                            ]
+                          },
+                          "aspect": {
+                            "type": "string",
+                            "enum": [
+                              "conjunction",
+                              "opposition",
+                              "trine",
+                              "square",
+                              "sextile",
+                              "quincunx",
+                              "semisextile",
+                              "semisquare",
+                              "sesquiquadrate"
+                            ]
+                          },
+                          "exactAngle": {
+                            "type": "number"
+                          },
+                          "separation": {
+                            "type": "number"
+                          },
+                          "orb": {
+                            "type": "number"
+                          },
+                          "applying": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": ["a", "b", "aspect", "exactAngle", "separation", "orb"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "birthTime": {
+                      "type": "object",
+                      "properties": {
+                        "assumed": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "assumedLocal": {
+                          "type": "object",
+                          "properties": {
+                            "hour": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 23
+                            },
+                            "minute": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 59
+                            },
+                            "zone": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": ["hour", "minute", "zone"],
+                          "additionalProperties": false
+                        },
+                        "basis": {
+                          "type": "string",
+                          "const": "spontaneous-birth-peak"
+                        },
+                        "basisPeakLocalHours": {
+                          "type": "object",
+                          "properties": {
+                            "from": {
+                              "type": "number"
+                            },
+                            "to": {
+                              "type": "number"
+                            }
+                          },
+                          "required": ["from", "to"],
+                          "additionalProperties": false
+                        },
+                        "uncertaintyHours": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "assumed",
+                        "assumedLocal",
+                        "basis",
+                        "basisPeakLocalHours",
+                        "uncertaintyHours"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "chartRef",
+                    "engine",
+                    "jdUt",
+                    "utc",
+                    "geo",
+                    "bodies",
+                    "angles",
+                    "houses",
+                    "aspects"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request (VALIDATION_FAILED, INVALID_TIME_ZONE, …).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No `x-api-key` header, or one that matches no configured key (UNAUTHORIZED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The wall-clock time does not resolve: it fell in a DST gap (NONEXISTENT_LOCAL_TIME) or happened twice (AMBIGUOUS_LOCAL_TIME, with both candidate instants in `details`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The house system is undefined at that latitude (HOUSE_SYSTEM_UNDEFINED_AT_LATITUDE, with systems that do work in `details`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/transits/key-dates": {
+      "post": {
+        "operationId": "createKeyDates",
+        "summary": "Key dates, via the transit funnel",
+        "description": "Scans a date window for nested slow/social/fast activations of the natal stories and returns clustered windows with their full activation paths. The resolved funnel and the observed density are echoed back, so a client can retune its filters against a measurement instead of a guess.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "when": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "utc": {
+                            "type": "object",
+                            "properties": {
+                              "year": {
+                                "type": "integer",
+                                "minimum": -12000,
+                                "maximum": 16000
+                              },
+                              "month": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 12
+                              },
+                              "day": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 31
+                              },
+                              "hour": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 23
+                              },
+                              "minute": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 59
+                              },
+                              "second": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 60
+                              }
+                            },
+                            "required": ["year", "month", "day", "hour", "minute"]
+                          }
+                        },
+                        "required": ["utc"]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "local": {
+                            "type": "object",
+                            "properties": {
+                              "year": {
+                                "type": "integer",
+                                "minimum": -12000,
+                                "maximum": 16000
+                              },
+                              "month": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 12
+                              },
+                              "day": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 31
+                              },
+                              "hour": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 23
+                              },
+                              "minute": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 59
+                              },
+                              "second": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 60
+                              },
+                              "zone": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": ["year", "month", "day", "hour", "minute", "zone"]
+                          }
+                        },
+                        "required": ["local"]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "localDate": {
+                            "type": "object",
+                            "properties": {
+                              "year": {
+                                "type": "integer",
+                                "minimum": -12000,
+                                "maximum": 16000
+                              },
+                              "month": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 12
+                              },
+                              "day": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 31
+                              },
+                              "zone": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": ["year", "month", "day", "zone"],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": ["localDate"]
+                      }
+                    ]
+                  },
+                  "geo": {
+                    "type": "object",
+                    "properties": {
+                      "lat": {
+                        "type": "number",
+                        "minimum": -90,
+                        "maximum": 90
+                      },
+                      "lon": {
+                        "type": "number",
+                        "minimum": -180,
+                        "maximum": 180
+                      }
+                    },
+                    "required": ["lat", "lon"]
+                  },
+                  "houseSystem": {
+                    "default": "P",
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1
+                  },
+                  "from": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  "to": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  "funnel": {
+                    "default": "funnel.default",
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["funnel.default", "funnel.prototype", "funnel.strict"]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "slow": {
+                            "type": "object",
+                            "properties": {
+                              "bodies": {
+                                "minItems": 1,
+                                "maxItems": 12,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "sun",
+                                    "moon",
+                                    "mercury",
+                                    "venus",
+                                    "mars",
+                                    "jupiter",
+                                    "saturn",
+                                    "uranus",
+                                    "neptune",
+                                    "pluto",
+                                    "trueNode",
+                                    "meanNode",
+                                    "lilith",
+                                    "chiron"
+                                  ]
+                                }
+                              },
+                              "aspects": {
+                                "minItems": 1,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "conjunction",
+                                    "opposition",
+                                    "trine",
+                                    "square",
+                                    "sextile",
+                                    "quincunx",
+                                    "semisextile",
+                                    "semisquare",
+                                    "sesquiquadrate"
+                                  ]
+                                }
+                              },
+                              "orbDeg": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 10
+                              }
+                            },
+                            "required": ["bodies", "aspects", "orbDeg"],
+                            "additionalProperties": false
+                          },
+                          "social": {
+                            "type": "object",
+                            "properties": {
+                              "bodies": {
+                                "minItems": 1,
+                                "maxItems": 12,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "sun",
+                                    "moon",
+                                    "mercury",
+                                    "venus",
+                                    "mars",
+                                    "jupiter",
+                                    "saturn",
+                                    "uranus",
+                                    "neptune",
+                                    "pluto",
+                                    "trueNode",
+                                    "meanNode",
+                                    "lilith",
+                                    "chiron"
+                                  ]
+                                }
+                              },
+                              "aspects": {
+                                "minItems": 1,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "conjunction",
+                                    "opposition",
+                                    "trine",
+                                    "square",
+                                    "sextile",
+                                    "quincunx",
+                                    "semisextile",
+                                    "semisquare",
+                                    "sesquiquadrate"
+                                  ]
+                                }
+                              },
+                              "orbDeg": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 10
+                              }
+                            },
+                            "required": ["bodies", "aspects", "orbDeg"],
+                            "additionalProperties": false
+                          },
+                          "fast": {
+                            "type": "object",
+                            "properties": {
+                              "bodies": {
+                                "minItems": 1,
+                                "maxItems": 12,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "sun",
+                                    "moon",
+                                    "mercury",
+                                    "venus",
+                                    "mars",
+                                    "jupiter",
+                                    "saturn",
+                                    "uranus",
+                                    "neptune",
+                                    "pluto",
+                                    "trueNode",
+                                    "meanNode",
+                                    "lilith",
+                                    "chiron"
+                                  ]
+                                }
+                              },
+                              "aspects": {
+                                "minItems": 1,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "conjunction",
+                                    "opposition",
+                                    "trine",
+                                    "square",
+                                    "sextile",
+                                    "quincunx",
+                                    "semisextile",
+                                    "semisquare",
+                                    "sesquiquadrate"
+                                  ]
+                                }
+                              },
+                              "orbDeg": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 10
+                              }
+                            },
+                            "required": ["bodies", "aspects", "orbDeg"],
+                            "additionalProperties": false
+                          },
+                          "nesting": {
+                            "type": "string",
+                            "enum": ["same-story", "same-point"]
+                          },
+                          "clusterDays": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 90
+                          }
+                        },
+                        "required": ["slow", "social", "fast", "nesting", "clusterDays"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "scoring": {
+                    "default": "v2",
+                    "type": "string",
+                    "enum": ["v1", "v2"]
+                  }
+                },
+                "required": ["when", "geo", "from", "to"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Chart reference, engine versions, the requested and resolved funnel, the span, the observed density, the natal stories, and the key-date windows with their paths. src/http/routes/v1/key-dates.ts is the source of truth for the exact shape.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Chart reference, engine versions, the requested and resolved funnel, the span, the observed density, the natal stories, and the key-date windows with their paths. src/http/routes/v1/key-dates.ts is the source of truth for the exact shape."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request, an unknown funnel preset, `to` not after `from`, or a span beyond the limit (WINDOW_TOO_LARGE, with the limit in `details`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No `x-api-key` header, or one that matches no configured key (UNAUTHORIZED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The wall-clock birth time does not resolve (DST gap or fold).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/transits/story-windows": {
+      "post": {
+        "operationId": "createStoryWindows",
+        "summary": "The past windows of one story, strongest first",
+        "description": "The same funnel as POST /v1/transits/key-dates, scoped to the single natal story named by `signature` and ordered by descending intensity rather than by date. Built for the end of onboarding: a client that stored a story in an earlier session holds its signature — which is stable across sessions and across people, unlike the per-chart `id` — and asks when that story was last active. `from` and `to` are both optional and default to the ten years ending today, the shortest span over which the quietest story on the reference chart still yields three windows. `limit` defaults to 3. The windows are identical to the ones key-dates returns for the same story over the same span; scoping the funnel changes the cost, never the answer.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "when": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "utc": {
+                            "type": "object",
+                            "properties": {
+                              "year": {
+                                "type": "integer",
+                                "minimum": -12000,
+                                "maximum": 16000
+                              },
+                              "month": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 12
+                              },
+                              "day": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 31
+                              },
+                              "hour": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 23
+                              },
+                              "minute": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 59
+                              },
+                              "second": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 60
+                              }
+                            },
+                            "required": ["year", "month", "day", "hour", "minute"]
+                          }
+                        },
+                        "required": ["utc"]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "local": {
+                            "type": "object",
+                            "properties": {
+                              "year": {
+                                "type": "integer",
+                                "minimum": -12000,
+                                "maximum": 16000
+                              },
+                              "month": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 12
+                              },
+                              "day": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 31
+                              },
+                              "hour": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 23
+                              },
+                              "minute": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 59
+                              },
+                              "second": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 60
+                              },
+                              "zone": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": ["year", "month", "day", "hour", "minute", "zone"]
+                          }
+                        },
+                        "required": ["local"]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "localDate": {
+                            "type": "object",
+                            "properties": {
+                              "year": {
+                                "type": "integer",
+                                "minimum": -12000,
+                                "maximum": 16000
+                              },
+                              "month": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 12
+                              },
+                              "day": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 31
+                              },
+                              "zone": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": ["year", "month", "day", "zone"],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": ["localDate"]
+                      }
+                    ]
+                  },
+                  "geo": {
+                    "type": "object",
+                    "properties": {
+                      "lat": {
+                        "type": "number",
+                        "minimum": -90,
+                        "maximum": 90
+                      },
+                      "lon": {
+                        "type": "number",
+                        "minimum": -180,
+                        "maximum": 180
+                      }
+                    },
+                    "required": ["lat", "lon"]
+                  },
+                  "houseSystem": {
+                    "default": "P",
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1
+                  },
+                  "signature": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "from": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  "to": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  "limit": {
+                    "default": 3,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 120
+                  },
+                  "funnel": {
+                    "default": "funnel.default",
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["funnel.default", "funnel.prototype", "funnel.strict"]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "slow": {
+                            "type": "object",
+                            "properties": {
+                              "bodies": {
+                                "minItems": 1,
+                                "maxItems": 12,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "sun",
+                                    "moon",
+                                    "mercury",
+                                    "venus",
+                                    "mars",
+                                    "jupiter",
+                                    "saturn",
+                                    "uranus",
+                                    "neptune",
+                                    "pluto",
+                                    "trueNode",
+                                    "meanNode",
+                                    "lilith",
+                                    "chiron"
+                                  ]
+                                }
+                              },
+                              "aspects": {
+                                "minItems": 1,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "conjunction",
+                                    "opposition",
+                                    "trine",
+                                    "square",
+                                    "sextile",
+                                    "quincunx",
+                                    "semisextile",
+                                    "semisquare",
+                                    "sesquiquadrate"
+                                  ]
+                                }
+                              },
+                              "orbDeg": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 10
+                              }
+                            },
+                            "required": ["bodies", "aspects", "orbDeg"],
+                            "additionalProperties": false
+                          },
+                          "social": {
+                            "type": "object",
+                            "properties": {
+                              "bodies": {
+                                "minItems": 1,
+                                "maxItems": 12,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "sun",
+                                    "moon",
+                                    "mercury",
+                                    "venus",
+                                    "mars",
+                                    "jupiter",
+                                    "saturn",
+                                    "uranus",
+                                    "neptune",
+                                    "pluto",
+                                    "trueNode",
+                                    "meanNode",
+                                    "lilith",
+                                    "chiron"
+                                  ]
+                                }
+                              },
+                              "aspects": {
+                                "minItems": 1,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "conjunction",
+                                    "opposition",
+                                    "trine",
+                                    "square",
+                                    "sextile",
+                                    "quincunx",
+                                    "semisextile",
+                                    "semisquare",
+                                    "sesquiquadrate"
+                                  ]
+                                }
+                              },
+                              "orbDeg": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 10
+                              }
+                            },
+                            "required": ["bodies", "aspects", "orbDeg"],
+                            "additionalProperties": false
+                          },
+                          "fast": {
+                            "type": "object",
+                            "properties": {
+                              "bodies": {
+                                "minItems": 1,
+                                "maxItems": 12,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "sun",
+                                    "moon",
+                                    "mercury",
+                                    "venus",
+                                    "mars",
+                                    "jupiter",
+                                    "saturn",
+                                    "uranus",
+                                    "neptune",
+                                    "pluto",
+                                    "trueNode",
+                                    "meanNode",
+                                    "lilith",
+                                    "chiron"
+                                  ]
+                                }
+                              },
+                              "aspects": {
+                                "minItems": 1,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "conjunction",
+                                    "opposition",
+                                    "trine",
+                                    "square",
+                                    "sextile",
+                                    "quincunx",
+                                    "semisextile",
+                                    "semisquare",
+                                    "sesquiquadrate"
+                                  ]
+                                }
+                              },
+                              "orbDeg": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 10
+                              }
+                            },
+                            "required": ["bodies", "aspects", "orbDeg"],
+                            "additionalProperties": false
+                          },
+                          "nesting": {
+                            "type": "string",
+                            "enum": ["same-story", "same-point"]
+                          },
+                          "clusterDays": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 90
+                          }
+                        },
+                        "required": ["slow", "social", "fast", "nesting", "clusterDays"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "scoring": {
+                    "default": "v2",
+                    "type": "string",
+                    "enum": ["v1", "v2"]
+                  }
+                },
+                "required": ["when", "geo", "signature"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Chart reference, engine versions, the requested and resolved funnel, the resolved span, the density of this one story over it, the limit, the story itself with its signature, and the top windows with their full slow/social/fast paths. src/http/routes/v1/story-windows.ts is the source of truth for the exact shape.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Chart reference, engine versions, the requested and resolved funnel, the resolved span, the density of this one story over it, the limit, the story itself with its signature, and the top windows with their full slow/social/fast paths. src/http/routes/v1/story-windows.ts is the source of truth for the exact shape."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request, an unknown funnel preset, `to` not after `from`, or a span beyond the limit (WINDOW_TOO_LARGE, with the limit in `details`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No `x-api-key` header, or one that matches no configured key (UNAUTHORIZED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No story in this chart carries that signature (STORY_NOT_IN_CHART). Not an empty 200: a story that was merely quiet returns 200 with an empty `windows`, and a client must be able to tell the two apart. `details.signatures` lists every signature the chart does carry, so a stale one can be recovered from.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The wall-clock birth time does not resolve (DST gap or fold).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/transits/returns": {
+      "post": {
+        "operationId": "createReturns",
+        "summary": "Planetary returns, with life phases",
+        "description": "Birth-anchored scan for return and half-return contacts of each requested body with its own natal position, labelled with the life-phase vocabulary where one exists. No `from` and no `geo`, by design: which occurrence a return is can only be counted from birth, and a return does not depend on where on Earth the birth happened.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "when": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "utc": {
+                            "type": "object",
+                            "properties": {
+                              "year": {
+                                "type": "integer",
+                                "minimum": -12000,
+                                "maximum": 16000
+                              },
+                              "month": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 12
+                              },
+                              "day": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 31
+                              },
+                              "hour": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 23
+                              },
+                              "minute": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 59
+                              },
+                              "second": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 60
+                              }
+                            },
+                            "required": ["year", "month", "day", "hour", "minute"]
+                          }
+                        },
+                        "required": ["utc"]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "local": {
+                            "type": "object",
+                            "properties": {
+                              "year": {
+                                "type": "integer",
+                                "minimum": -12000,
+                                "maximum": 16000
+                              },
+                              "month": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 12
+                              },
+                              "day": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 31
+                              },
+                              "hour": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 23
+                              },
+                              "minute": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 59
+                              },
+                              "second": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 60
+                              },
+                              "zone": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": ["year", "month", "day", "hour", "minute", "zone"]
+                          }
+                        },
+                        "required": ["local"]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "localDate": {
+                            "type": "object",
+                            "properties": {
+                              "year": {
+                                "type": "integer",
+                                "minimum": -12000,
+                                "maximum": 16000
+                              },
+                              "month": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 12
+                              },
+                              "day": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 31
+                              },
+                              "zone": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": ["year", "month", "day", "zone"],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": ["localDate"]
+                      }
+                    ]
+                  },
+                  "bodies": {
+                    "default": ["saturn", "uranus", "chiron", "pluto"],
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "sun",
+                        "mercury",
+                        "venus",
+                        "mars",
+                        "jupiter",
+                        "saturn",
+                        "uranus",
+                        "neptune",
+                        "pluto",
+                        "chiron"
+                      ]
+                    }
+                  },
+                  "horizonYears": {
+                    "default": 100,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 120
+                  }
+                },
+                "required": ["when"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Engine versions, the birth instant, the horizon, and the return events with ages, contact windows, retrograde passes and phase labels. src/http/routes/v1/returns.ts is the source of truth for the exact shape.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Engine versions, the birth instant, the horizon, and the return events with ages, contact windows, retrograde passes and phase labels. src/http/routes/v1/returns.ts is the source of truth for the exact shape."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request (VALIDATION_FAILED) — including a body excluded from transits for measured reasons, or a horizon beyond a human lifetime.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No `x-api-key` header, or one that matches no configured key (UNAUTHORIZED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The wall-clock birth time does not resolve (DST gap or fold).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "apiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-api-key",
+        "description": "One of the keys the deployment was configured with. A deployment with none configured accepts every request; /v1/health, /v1/ready and /v1/meta/license are reachable without a key in every deployment."
+      }
+    },
+    "schemas": {
+      "AspectAngles": {
+        "type": "object",
+        "description": "The exact angle of every aspect the engine names, in degrees. The keys are the aspect identifiers that appear in `aspects[].aspect` on POST /v1/charts and in the funnel configuration of the transit endpoints.",
+        "additionalProperties": false,
+        "required": [
+          "conjunction",
+          "opposition",
+          "trine",
+          "square",
+          "sextile",
+          "quincunx",
+          "semisextile",
+          "semisquare",
+          "sesquiquadrate"
+        ],
+        "properties": {
+          "conjunction": {
+            "type": "number",
+            "const": 0,
+            "description": "conjunction: 0°."
+          },
+          "opposition": {
+            "type": "number",
+            "const": 180,
+            "description": "opposition: 180°."
+          },
+          "trine": {
+            "type": "number",
+            "const": 120,
+            "description": "trine: 120°."
+          },
+          "square": {
+            "type": "number",
+            "const": 90,
+            "description": "square: 90°."
+          },
+          "sextile": {
+            "type": "number",
+            "const": 60,
+            "description": "sextile: 60°."
+          },
+          "quincunx": {
+            "type": "number",
+            "const": 150,
+            "description": "quincunx: 150°."
+          },
+          "semisextile": {
+            "type": "number",
+            "const": 30,
+            "description": "semisextile: 30°."
+          },
+          "semisquare": {
+            "type": "number",
+            "const": 45,
+            "description": "semisquare: 45°."
+          },
+          "sesquiquadrate": {
+            "type": "number",
+            "const": 135,
+            "description": "sesquiquadrate: 135°."
+          }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "description": "The shape of every non-2xx response.",
+        "required": ["error"],
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message", "requestId"],
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "Stable machine-readable identifier — UNAUTHORIZED, VALIDATION_FAILED, WINDOW_TOO_LARGE, NONEXISTENT_LOCAL_TIME, AMBIGUOUS_LOCAL_TIME, HOUSE_SYSTEM_UNDEFINED_AT_LATITUDE, EPHEMERIS_UNAVAILABLE, SERVICE_OVERLOADED, NOT_FOUND, INTERNAL, and the rest of STATUS_BY_CODE in src/http/app.ts. Branch on this, not on the message. SERVICE_OVERLOADED carries a Retry-After header and can arrive from any endpoint: it is the process shedding load before the request reaches a route."
+              },
+              "message": {
+                "type": "string",
+                "description": "Human-readable. Never a stack trace, in any environment."
+              },
+              "requestId": {
+                "type": "string",
+                "description": "Echoes the x-request-id header when one was sent. Quote it when reporting."
+              },
+              "details": {
+                "type": "object",
+                "description": "Code-specific and optional: validation issues, both candidate instants for an ambiguous local time, working house systems for a latitude, the window limit that was exceeded."
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

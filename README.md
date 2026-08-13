@@ -129,6 +129,22 @@ second copy of the truth that nothing keeps equal to the handler. A contract
 test asserts that every registered route appears in the document and that the
 version it advertises is the version a live call returns.
 
+The same document is committed to [`docs/openapi.json`](docs/openapi.json) by
+`pnpm contract:emit`, and a contract test fails while that file and the code
+disagree — so regenerating it is part of the commit that changes a schema, and
+a change to the wire shape arrives as a diff somebody reads rather than as a
+surprise at a client's runtime. Clients pin to the file rather than to a URL:
+navigate.fyi copies it into its own tree and generates its wire types from the
+copy, which is why its build needs no engine running and why it can only move
+to a new contract deliberately.
+
+`components.schemas.AspectAngles` is in the document for the same reason. It is
+vocabulary rather than wire shape and no operation references it, but a client
+that has to check an orb needs the nine angles before it has asked for a chart,
+and the copy it would otherwise type by hand is the copy that goes wrong — as
+one did, next to a list of error codes in which eight of fourteen named nothing
+this engine has ever returned.
+
 ## Ephemeris data
 
 The `.se1` data files are **never committed**. `ephemeris.manifest.json` names
