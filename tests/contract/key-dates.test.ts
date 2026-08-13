@@ -427,3 +427,47 @@ describe('still numbers only', () => {
     expect(found).toEqual([]);
   });
 });
+
+describe('a story says which side each point is on', () => {
+  /**
+   * The incident this exists for: the response carried six point names and the
+   * word "trine", and nothing else. A story is a conjunct cluster aspecting
+   * another conjunct cluster, so a member's relationship to another member
+   * depends entirely on its side — same side is a conjunction, across is the
+   * story's aspect and only between the groups.
+   *
+   * Flattened into `members`, that is unrecoverable, and the client did the
+   * only thing it could: it claimed every pair carried the story's aspect. A
+   * reader was told his Sun was trine his Mars. They are 4.2 degrees apart.
+   */
+  interface Sided {
+    stories: {
+      members: string[];
+      a: { members: string[]; lon: number };
+      b: { members: string[]; lon: number };
+    }[];
+  }
+
+  it('publishes both sides, not only their union', () => {
+    const story = (base as unknown as Sided).stories[0];
+    expect(story).toBeDefined();
+    if (story === undefined) return;
+
+    expect(story.a.members.length).toBeGreaterThan(0);
+    expect(story.b.members.length).toBeGreaterThan(0);
+    // The union is exactly `members`: the sides add structure, never points.
+    expect([...story.a.members, ...story.b.members].sort()).toEqual([...story.members].sort());
+    // No point can be on both sides, or "same side" would mean nothing.
+    for (const m of story.a.members) expect(story.b.members).not.toContain(m);
+  });
+
+  it('carries each side its own longitude, which is what the aspect measures', () => {
+    const story = (base as unknown as Sided).stories[0];
+    if (story === undefined) return;
+
+    expect(story.a.lon).toBeGreaterThanOrEqual(0);
+    expect(story.a.lon).toBeLessThan(360);
+    expect(story.b.lon).toBeGreaterThanOrEqual(0);
+    expect(story.b.lon).toBeLessThan(360);
+  });
+});

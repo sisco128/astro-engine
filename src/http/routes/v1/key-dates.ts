@@ -178,6 +178,26 @@ export function registerKeyDateRoutes(
         aspect: story.aspect,
         orb: story.orb,
         members: story.members,
+        /**
+         * The two sides, and not only their union.
+         *
+         * `members` flattens them, and flattening loses the one fact a reader
+         * has to be told correctly: a story is a conjunct cluster aspecting
+         * another conjunct cluster, so a member's relationship to another
+         * member depends entirely on which side it is on. Same side means
+         * conjunction; across means this story's aspect, and then only
+         * between the two groups.
+         *
+         * Published because a client given six names and the word "trine" can
+         * only guess, and the guess it made was that every pair was a trine —
+         * so Navigate told a reader that his Sun was trine his Mars when the
+         * two are four degrees apart. The engine knew; it just did not say.
+         *
+         * `lon` is each side's own longitude, which is what the aspect is
+         * actually measured between.
+         */
+        a: { members: story.a.members, lon: story.a.lon },
+        b: { members: story.b.members, lon: story.b.lon },
         score: story.score,
         strength: story.strength,
         scoringVersion: story.scoringVersion,

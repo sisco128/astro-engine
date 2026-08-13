@@ -239,6 +239,9 @@ export function registerStoryWindowRoutes(
         aspect: story.aspect,
         orb: story.orb,
         members: story.members,
+        // The two sides, as on /v1/transits/key-dates. See the note there.
+        a: { members: story.a.members, lon: story.a.lon },
+        b: { members: story.b.members, lon: story.b.lon },
         score: story.score,
         strength: story.strength,
         scoringVersion: story.scoringVersion,
