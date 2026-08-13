@@ -12,7 +12,7 @@
  * hardcoded three levels up from __dirname and could not be moved.
  */
 
-import { availableParallelism } from 'node:os';
+import { availableParallelism, totalmem } from 'node:os';
 import { resolve } from 'node:path';
 
 import { ENGINE_VERSION } from '../version.js';
@@ -77,7 +77,55 @@ function profile(): EphemerisProfile {
   return value as EphemerisProfile;
 }
 
-const defaultPoolSize = Math.max(1, Math.min(availableParallelism() - 1, 4));
+/**
+ * How many compute workers, when nobody says.
+ *
+ * `availableParallelism()` counts the cores of the MACHINE, not the share this
+ * container was given, and inside a container those are different numbers by a
+ * wide margin: a Render starter instance sees a host with many cores and half
+ * of one to use. Deriving the pool from it produced four forked processes on
+ * an instance that fits perhaps two, and under concurrent load the kernel
+ * killed them — `PoolError: Worker exited with code null`, which is a signal,
+ * not a crash. Sixteen requests, two answers, fourteen sockets left open.
+ *
+ * So the memory is the real constraint, not the cores: each worker is a full
+ * Node process holding its own ephemeris. Roughly 220 MB apiece is the
+ * observed floor, and the pool is capped by what the box actually has. The
+ * core count still bounds it from the other side — more workers than cores is
+ * only contention — and one core stays for the event loop, which is what
+ * answers the health check while the pool is busy.
+ */
+const WORKER_FOOTPRINT_BYTES = 220 * 1024 * 1024;
+
+/**
+ * Exported and pure so it can be tested against a box this machine is not.
+ *
+ * The first version of this guard asserted the invariant against `totalmem()`
+ * of whatever ran the suite, which on a developer's laptop passes for any
+ * configuration at all — including the four-worker one that was killing the
+ * deployed service. A test that cannot fail on the machine that runs it is
+ * not protecting the machine that matters.
+ */
+export function poolSizeFor(totalBytes: number, cores: number): number {
+  return Math.max(
+    1,
+    Math.min(
+      cores - 1,
+      // Half the box for workers: the parent process, the result cache and
+      // the OS need the other half, and running out is not a slowdown here —
+      // it is the kernel choosing which process dies.
+      Math.floor(totalBytes / 2 / WORKER_FOOTPRINT_BYTES),
+      4,
+    ),
+  );
+}
+
+/** Bytes of result cache a box of this size can spare. */
+export function cacheBytesFor(totalBytes: number): number {
+  return Math.floor(totalBytes / 8);
+}
+
+const defaultPoolSize = poolSizeFor(totalmem(), availableParallelism());
 
 /**
  * Read before the object literal because two settings need it: the AGPL source
@@ -97,17 +145,20 @@ export const env = Object.freeze({
   strictEphemeris: bool('SE_STRICT_EPHEMERIS', true),
   forbidFallback: bool('SE_FORBID_FALLBACK', true),
 
-  /**
-   * Compute workers. Defaults to one fewer than the machine has, capped at 4:
-   * the work is CPU-bound, so more workers than cores only adds contention,
-   * and one core is left for the event loop to keep answering health checks.
-   */
+  /** Compute workers. See `defaultPoolSize` — memory decides, not cores. */
   poolSize: int('POOL_SIZE', 0) || defaultPoolSize,
   poolTaskTimeoutMs: int('POOL_TASK_TIMEOUT_MS', 60_000),
 
-  /** Result cache. Bounded by both count and bytes: entries are multi-MB. */
+  /**
+   * Result cache. Bounded by both count and bytes: entries are multi-MB.
+   *
+   * A share of the box rather than a flat number, for the same reason as the
+   * pool: 256 MB was the default and the deployed blueprint asked for exactly
+   * that — on a 512 MB instance, alongside the workers. A cache is supposed to
+   * make a service faster, not decide which process the kernel kills.
+   */
   cacheMaxItems: int('CACHE_MAX_ITEMS', 500),
-  cacheMaxBytes: int('CACHE_MAX_BYTES', 256 * 1024 * 1024),
+  cacheMaxBytes: int('CACHE_MAX_BYTES', cacheBytesFor(totalmem())),
 
   requestTimeoutMs: int('REQUEST_TIMEOUT_MS', 30_000),
   maxBodyBytes: int('MAX_BODY_BYTES', 262_144),

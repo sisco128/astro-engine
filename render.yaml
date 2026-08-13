@@ -47,18 +47,29 @@ services:
       - key: EPHEMERIS_PROFILE
         value: full
 
-      # 0 means one worker per core. A starter instance has little, so this
-      # resolves small on purpose — the pool exists for isolation, not
-      # throughput.
+      # Explicit, because the number this used to derive was the wrong number.
+      # `0` meant "one per core", and `availableParallelism()` inside a
+      # container counts the HOST's cores — so a starter instance with half a
+      # CPU forked four workers, each holding its own ephemeris, and the kernel
+      # killed them under load: `Worker exited with code null`, a signal rather
+      # than a crash. Sixteen requests in, two answers out.
+      #
+      # Two, because the pool exists for isolation rather than throughput, and
+      # because two Node processes plus the parent are what 512 MB actually
+      # holds. The code now derives the same bound from memory when this is
+      # unset, so a deployment that forgets it is no longer dangerous.
       - key: POOL_SIZE
-        value: '0'
+        value: '2'
       - key: POOL_TASK_TIMEOUT_MS
         value: '60000'
 
       - key: CACHE_MAX_ITEMS
         value: '500'
+      # 64 MB, not 256. A quarter-gigabyte cache on a half-gigabyte instance,
+      # next to the workers, is not a cache — it is the reason there was no
+      # memory left for one of them.
       - key: CACHE_MAX_BYTES
-        value: '268435456'
+        value: '67108864'
 
       # Which origins may call this directly. Navigate reaches the engine from
       # its server, so this is only for the browser-side wheel if that ever
