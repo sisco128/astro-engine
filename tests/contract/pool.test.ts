@@ -138,3 +138,38 @@ describe('bounds and failures', () => {
     expect(response.json<{ error: { code: string } }>().error.code).toBe('WINDOW_TOO_LARGE');
   });
 });
+
+describe('a compute failure is an answer', () => {
+  /**
+   * STATUS_BY_CODE has carried COMPUTE_OVERLOADED, COMPUTE_UNAVAILABLE and
+   * COMPUTE_WORKER_LOST since the pool was written, and every one of them was
+   * unreachable: nothing imported PoolError, so the error handler's generic
+   * branch caught them all and answered `500 INTERNAL`, logged as "unhandled
+   * error". On 13 August 2026 that is what eleven key-dates requests got — a
+   * status that says the fault is unspecified and internal, for a condition
+   * the engine can name exactly and the caller could act on.
+   *
+   * Its own app, because the way to reach the condition honestly is to take
+   * the pool away, and the suite above needs a working one.
+   */
+  it('answers 503 and the code, not 500 INTERNAL, when the pool is gone', async () => {
+    const isolated = await buildApp();
+    await isolated.ready();
+    await isolated.pool.whenReady();
+
+    try {
+      await isolated.pool.close();
+
+      const response = await isolated.inject({
+        method: 'POST',
+        url: '/v1/transits/key-dates',
+        payload: { ...BIRTH, from: '2024-01-01', to: '2024-07-01' },
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(response.json<{ error: { code: string } }>().error.code).toBe('COMPUTE_UNAVAILABLE');
+    } finally {
+      await isolated.close();
+    }
+  }, 60_000);
+});

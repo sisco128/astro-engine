@@ -22,7 +22,7 @@ import { ResultCache } from '../cache/result-cache.js';
 import { GeoError } from '../geo/errors.js';
 import { createNominatimClient, type FetchLike } from '../geo/nominatim.js';
 import { createGeoSearch } from '../geo/search.js';
-import { ComputePool } from '../pool/pool.js';
+import { ComputePool, PoolError } from '../pool/pool.js';
 import { LocalTimeError } from '../time/local-to-utc.js';
 import { ENGINE_VERSION } from '../version.js';
 import { buildOpenApiDocument } from './openapi.js';
@@ -65,6 +65,57 @@ const STATUS_BY_CODE: Readonly<Record<string, number>> = {
   // distinction tells a caller whether retrying here is worth anything.
   GEO_UPSTREAM_FAILED: 502,
 };
+
+/**
+ * The failures this engine raises on purpose, and what each one is worth to a
+ * caller. Anything not named here is a bug in this service and leaves as 500.
+ *
+ * Kept apart from the error handler because the list is the interesting part
+ * and it grows: PoolError was missing from it for the whole of this project's
+ * history — nothing imported the class, so every compute failure fell through
+ * to the generic branch and left as `500 INTERNAL`, logged as "unhandled
+ * error", while the three COMPUTE_* entries in STATUS_BY_CODE sat unreachable.
+ * Production on 13 August 2026 showed the cost: eleven key-dates requests died
+ * with COMPUTE_WORKER_LOST and told their caller only that something
+ * unspecified had gone wrong here. The distinction the table already drew is
+ * the one the caller needs — 504, the worker was lost and a retry may work;
+ * 503, the pool is full or gone and the retry should wait.
+ */
+function nameOf(error: unknown):
+  | {
+      status: number;
+      code: string;
+      message: string;
+      details?: Readonly<Record<string, unknown>>;
+    }
+  | undefined {
+  if (
+    error instanceof EphemerisError ||
+    error instanceof LocalTimeError ||
+    error instanceof GeoError
+  ) {
+    return {
+      status: STATUS_BY_CODE[error.code] ?? 500,
+      code: error.code,
+      message: error.message,
+      details: error.details,
+    };
+  }
+
+  // A compute failure is an answer, not an internal error.
+  if (error instanceof PoolError) {
+    return { status: STATUS_BY_CODE[error.code] ?? 503, code: error.code, message: error.message };
+  }
+
+  // Load shedding. @fastify/under-pressure has already put 503 and Retry-After
+  // on the reply; this gives the caller the same envelope every other failure
+  // has, instead of the plugin's own error shape.
+  if (error instanceof OverloadedError) {
+    return { status: STATUS_BY_CODE[error.code] ?? 503, code: error.code, message: error.message };
+  }
+
+  return undefined;
+}
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -301,30 +352,16 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   }
 
   app.setErrorHandler((error, request, reply) => {
-    if (
-      error instanceof EphemerisError ||
-      error instanceof LocalTimeError ||
-      error instanceof GeoError
-    ) {
-      const status = STATUS_BY_CODE[error.code] ?? 500;
-      request.log.warn({ code: error.code, details: error.details }, error.message);
-      return reply.status(status).send({
+    const named = nameOf(error);
+    if (named !== undefined) {
+      request.log.warn({ code: named.code, details: named.details }, named.message);
+      return reply.status(named.status).send({
         error: {
-          code: error.code,
-          message: error.message,
+          code: named.code,
+          message: named.message,
           requestId: request.id,
-          details: error.details,
+          details: named.details,
         },
-      });
-    }
-
-    // Load shedding. @fastify/under-pressure has already put 503 and
-    // Retry-After on the reply; this gives the caller the same envelope every
-    // other failure has, instead of the plugin's own error shape.
-    if (error instanceof OverloadedError) {
-      request.log.warn({ code: error.code }, error.message);
-      return reply.status(STATUS_BY_CODE[error.code] ?? 503).send({
-        error: { code: error.code, message: error.message, requestId: request.id },
       });
     }
 
