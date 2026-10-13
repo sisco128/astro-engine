@@ -276,6 +276,10 @@ export function registerStoryWindowRoutes(
             // construction, published anyway: a derivable-but-absent field is
             // how clients end up deriving it wrong.
             orbAtKeyDeg: window.peak.orbAtKeyDeg[tier],
+            // Where the transiting body is at that instant, so the client
+            // can place it in the natal houses: the orb says how close, not
+            // on which side of the natal point.
+            lonAtKey: window.peak.lonAtKey[tier],
           };
         }),
       })),
