@@ -54,6 +54,7 @@ interface KeyDatesBody {
       exact: string;
       durationDays: number;
       orbAtKeyDeg: number;
+      lonAtKey: number;
     }[];
   }[];
 }
@@ -146,6 +147,23 @@ describe('the funnel comes back whole', () => {
 
     const slowOrbs = base.keyDates.map((keyDate) => keyDate.path[0]?.orbAtKeyDeg ?? 0);
     expect(Math.max(...slowOrbs)).toBeGreaterThan(0.01);
+  });
+
+  it('publishes where each transiting body is at the key date, as a longitude', () => {
+    // The orb says how close the contact is, not on which side of the natal
+    // point the body sits — and a square, a trine or a sextile have two
+    // sides. The longitude is what lets a client place the transit in the
+    // natal houses (13 October 2026).
+    for (const keyDate of base.keyDates) {
+      for (const step of keyDate.path) {
+        expect(Number.isFinite(step.lonAtKey)).toBe(true);
+        expect(step.lonAtKey).toBeGreaterThanOrEqual(0);
+        expect(step.lonAtKey).toBeLessThan(360);
+      }
+    }
+    // Different key dates, different skies: the fast body moves.
+    const fastLons = new Set(base.keyDates.map((keyDate) => keyDate.path[2]?.lonAtKey.toFixed(2)));
+    expect(fastLons.size).toBeGreaterThan(1);
   });
 
   it('gives each tier a window of its own length, not a flat 30 days', () => {

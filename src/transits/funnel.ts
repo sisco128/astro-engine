@@ -23,7 +23,7 @@ import { ASPECTS } from '../domain/orb-policy.js';
 import type { Story } from '../domain/themes.js';
 import type { FunnelConfig, TierConfig, TierId } from '../domain/timescales.js';
 import { bodyState, type JulianDayUT } from '../ephemeris/swe.js';
-import { signedSeparation } from '../math/angle.js';
+import { signedSeparation, wrap360 } from '../math/angle.js';
 import { resonancesFor, type Resonance } from './resonance.js';
 
 export interface FunnelPath {
@@ -48,6 +48,20 @@ export interface FunnelPath {
    * longitude at the key date, which only the engine can evaluate.
    */
   readonly orbAtKeyDeg: { readonly slow: number; readonly social: number; readonly fast: number };
+  /**
+   * Where each tier's transiting body IS at the key date, as an ecliptic
+   * longitude in [0, 360).
+   *
+   * The same instant and the same evaluation as `orbAtKeyDeg`, published for
+   * the one thing the orb cannot give: the house the transiting body is
+   * crossing in the natal chart. The interpreter reads the window as «da
+   * dove arriva il cambiamento» — the natal house the transit falls in — and
+   * cannot derive the longitude from the contact alone: a square, a trine or
+   * a sextile sit on either side of the natal point, and only the ephemeris
+   * knows which. The client places it against the natal cusps it already
+   * has (13 October 2026, astro-interpreter's plan for the dialogue).
+   */
+  readonly lonAtKey: { readonly slow: number; readonly social: number; readonly fast: number };
   /**
    * Product of the three resonance intensities and the story's own strength.
    * Absent story strength (v1 scoring) it is the resonance product alone.
@@ -225,6 +239,11 @@ function orbAt(
   return Math.abs(signedSeparation(lon, natal, ASPECTS[resonance.aspect].angle, resonance.side));
 }
 
+/** The transiting body's longitude at the key date, in [0, 360). */
+function lonAt(jd: JulianDayUT, resonance: Resonance): number {
+  return wrap360(bodyState(jd, resonance.body).lon);
+}
+
 /** The three-level nesting for one story. */
 function nest(input: {
   story: Story;
@@ -262,6 +281,11 @@ function nest(input: {
             slow: orbAt(keyJd, slow, natalLon),
             social: orbAt(keyJd, social, natalLon),
             fast: orbAt(keyJd, fast, natalLon),
+          },
+          lonAtKey: {
+            slow: lonAt(keyJd, slow),
+            social: lonAt(keyJd, social),
+            fast: lonAt(keyJd, fast),
           },
         });
       }
