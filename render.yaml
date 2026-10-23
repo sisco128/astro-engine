@@ -87,3 +87,11 @@ services:
       # it here, and the engine said so instead of coming up open.
       - key: API_KEYS
         sync: false
+
+      # The secret in the URL a claude.ai custom connector is given:
+      # https://<host>/mcp/<token>. Optional — empty leaves /mcp/:token
+      # unmounted, and Claude Code reaches /mcp with an API key instead. At
+      # least 32 base64url characters, or the service refuses to start.
+      # See docs/adr/0006-mcp-connector.md.
+      - key: MCP_URL_TOKENS
+        sync: false
