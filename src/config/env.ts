@@ -127,6 +127,33 @@ export function cacheBytesFor(totalBytes: number): number {
 
 const defaultPoolSize = poolSizeFor(totalmem(), availableParallelism());
 
+/** Shortest secret accepted in the path of POST /mcp/:token. */
+export const MIN_URL_TOKEN_LENGTH = 32;
+
+/**
+ * The URL tokens, checked before anything binds.
+ *
+ * A token lives in a URL, so it is restricted to the base64url alphabet: it
+ * needs no encoding, and the log serializer in http/app.ts can recognise and
+ * redact it by shape. The length floor is what keeps a path secret a secret —
+ * a short one can be guessed, and unlike a key it is copied around wherever
+ * the connector URL goes.
+ *
+ * Exported and pure so the refusal can be asserted without a process per case,
+ * for the reason `poolSizeFor` is.
+ */
+export function parseUrlTokens(entries: readonly string[]): readonly string[] {
+  for (const entry of entries) {
+    if (entry.length < MIN_URL_TOKEN_LENGTH || !/^[A-Za-z0-9_-]+$/.test(entry)) {
+      throw new Error(
+        `Every MCP_URL_TOKENS entry must be at least ${String(MIN_URL_TOKEN_LENGTH)} characters ` +
+          'of A-Z, a-z, 0-9, "-" and "_". Generate one with: openssl rand -base64 48 | tr "+/" "-_" | tr -d "="',
+      );
+    }
+  }
+  return entries;
+}
+
 /**
  * Read before the object literal because two settings need it: the AGPL source
  * pointer, and the contact route inside the default geocoding User-Agent.
@@ -184,6 +211,18 @@ export const env = Object.freeze({
    * authenticates in front) has to say so by name.
    */
   authOptional: bool('AUTH_OPTIONAL', false),
+
+  /**
+   * Secrets accepted in the path of POST /mcp/:token — the only credential a
+   * claude.ai custom connector can carry, since it sends OAuth or nothing and
+   * never a header. See docs/adr/0006-mcp-connector.md.
+   *
+   * A list of its own rather than more `API_KEYS`, on purpose: a URL is copied
+   * more than a header is, so a leaked token has to be revocable without
+   * rotating the key a frontend runs on, and it must not open `/v1`. Empty
+   * means the route is not mounted at all.
+   */
+  mcpUrlTokens: parseUrlTokens(list('MCP_URL_TOKENS')),
 
   /**
    * Richieste al minuto, per secchio — e un secchio è una chiave API, o un

@@ -29,6 +29,9 @@ process.env['LOG_LEVEL'] = 'silent';
 
 const KEY = 'rate-limit-key-8c2f10';
 process.env['API_KEYS'] = KEY;
+const TOKEN_A = 'RateLimitTokenA_7c1e4b9d2f6a8c3e5b0d7f2a';
+const TOKEN_B = 'RateLimitTokenB_2d8f5a1c7e4b9d6f3a0c8e5b';
+process.env['MCP_URL_TOKENS'] = `${TOKEN_A},${TOKEN_B}`;
 process.env['RATE_LIMIT_PER_MINUTE'] = '4';
 process.env['POOL_SIZE'] = '1';
 
@@ -100,5 +103,38 @@ describe('the allowance is per reader, inside a key', () => {
     // behaviour that existed before readers were separable.
     const statuses = await knockTimes(6, {});
     expect(statuses.filter((status) => status === 429).length).toBeGreaterThan(0);
+  });
+});
+
+describe('an MCP URL token is a caller of its own', () => {
+  /**
+   * The cheapest request a token can make: GET, which passes the limiter and
+   * the token check and is then told the method is not allowed. The limiter
+   * runs first, so it counts every one.
+   */
+  async function knockWithToken(token: string): Promise<number> {
+    const response = await app.inject({ method: 'GET', url: `/mcp/${token}` });
+    return response.statusCode;
+  }
+
+  it('spends its own allowance, not the address it arrived from', async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 6; i += 1) statuses.push(await knockWithToken(TOKEN_A));
+
+    expect(statuses.filter((status) => status === 405)).toHaveLength(4);
+    expect(statuses.filter((status) => status === 429)).toHaveLength(2);
+  });
+
+  it('leaves a second token untouched', async () => {
+    // Every claude.ai connector arrives from Anthropic's addresses. Were the
+    // bucket the address, the first token's spending would be this one's 429.
+    expect(await knockWithToken(TOKEN_B)).toBe(405);
+  });
+
+  it('gives a wrong token no allowance of its own', async () => {
+    // Refused as a 401 on the address's bucket, not given a fresh one per
+    // guess — which would make guessing free.
+    const response = await app.inject({ method: 'GET', url: '/mcp/not-a-real-token' });
+    expect(response.statusCode).toBe(401);
   });
 });

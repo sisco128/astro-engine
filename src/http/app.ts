@@ -7,13 +7,13 @@
  * possible at all.
  */
 
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import underPressure from '@fastify/under-pressure';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 
 import { env } from '../config/env.js';
 import { EphemerisError } from '../ephemeris/errors.js';
@@ -22,10 +22,13 @@ import { ResultCache } from '../cache/result-cache.js';
 import { GeoError } from '../geo/errors.js';
 import { createNominatimClient, type FetchLike } from '../geo/nominatim.js';
 import { createGeoSearch } from '../geo/search.js';
+import type { EngineCall } from '../mcp/tools.js';
 import { ComputePool, PoolError } from '../pool/pool.js';
 import { LocalTimeError } from '../time/local-to-utc.js';
 import { ENGINE_VERSION } from '../version.js';
+import { bearerOf, bucketOf, digestOf, matches } from './credentials.js';
 import { buildOpenApiDocument } from './openapi.js';
+import { MCP_ROUTE, MCP_TOKEN_ROUTE, redactMcpToken, registerMcpRoutes } from './routes/mcp.js';
 import { registerChartRoutes } from './routes/v1/charts.js';
 import { registerGeoRoutes } from './routes/v1/geo.js';
 import { registerKeyDateRoutes } from './routes/v1/key-dates.js';
@@ -147,28 +150,29 @@ const PUBLIC_ROUTES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * A key as it is compared: a SHA-256 digest of it.
+ * Routes that check a credential of their own instead of an API key.
  *
- * Hashing both sides is what makes `timingSafeEqual` usable at all. It throws
- * on buffers of unequal length, so comparing raw keys would turn a
- * wrong-length guess into an exception rather than a rejection, and the shape
- * of that failure would leak the length of the real key. Digests are always 32
- * bytes, so every comparison is the same comparison.
+ * Not public: /mcp/:token refuses anyone without a valid token in its path,
+ * in a hook registered with the route itself (src/http/routes/mcp.ts). It is
+ * skipped here because that token is deliberately not an API key — a leaked
+ * connector URL must not open /v1 — and the key hook would refuse every
+ * request the route exists to serve.
  */
-function digestOf(key: string): Buffer {
-  return createHash('sha256').update(key, 'utf8').digest();
-}
+const SELF_AUTHENTICATING_ROUTES: ReadonlySet<string> = new Set([MCP_TOKEN_ROUTE]);
 
-/** Whether a presented key matches any configured one. */
-function matches(presented: string, digests: readonly Buffer[]): boolean {
-  const candidate = digestOf(presented);
-  // Every configured key is compared even after one matches: returning early
-  // would let response time carry the position of the matching key in the list.
-  let found = false;
-  for (const digest of digests) {
-    if (timingSafeEqual(candidate, digest)) found = true;
-  }
-  return found;
+/**
+ * The API key a request presents, if any.
+ *
+ * `x-api-key` everywhere. `Authorization: Bearer` on /mcp as well, and only
+ * there: the Messages API's MCP connector sends its credential no other way,
+ * while /v1's contract — and every client generated from it — names the
+ * header and nothing else.
+ */
+function presentedKey(request: FastifyRequest): string | undefined {
+  const header = request.headers['x-api-key'];
+  if (typeof header === 'string') return header;
+  if (request.routeOptions.url === MCP_ROUTE) return bearerOf(request.headers.authorization);
+  return undefined;
 }
 
 /**
@@ -237,6 +241,13 @@ export interface BuildAppOptions {
    * exists to honour. Production passes nothing and gets the global.
    */
   geoFetch?: FetchLike | undefined;
+
+  /**
+   * Where the logger writes. The second seam, and it earns its place the same
+   * way: the only proof that an MCP URL token never reaches the logs is to
+   * read the logs. Production passes nothing and gets stdout.
+   */
+  logStream?: { write(line: string): void } | undefined;
 }
 
 export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
@@ -248,7 +259,46 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   });
 
   const apiKeyDigests = env.apiKeys.map(digestOf);
+  // From the configured keys alone, before the internal one joins them below:
+  // an engine with no API_KEYS stays open in development, as it always was.
   const authRequired = apiKeyDigests.length > 0;
+
+  /**
+   * The key the MCP tools call /v1 with, in process.
+   *
+   * Each tool runs its route through `app.inject()`, and injected requests
+   * pass through the key hook like any other. This key is how they get past
+   * it: 32 random bytes per process, accepted like any configured key and able
+   * to do exactly what one can. It is never logged (the header is redacted),
+   * never sent over a network (inject has no socket) and never stored outside
+   * this closure — a restart replaces it.
+   */
+  const internalKey = randomBytes(32).toString('base64url');
+  const acceptedKeyDigests = [...apiKeyDigests, digestOf(internalKey)];
+  const urlTokenDigests = env.mcpUrlTokens.map(digestOf);
+
+  /**
+   * Whose allowance a request spends: a valid key's, a valid URL token's, or
+   * its address's.
+   *
+   * Only a *valid* credential earns its own bucket: keying on whatever arrived
+   * would let one client mint a fresh allowance per random string and escape
+   * the limit entirely, which is worse than no per-caller limit. A token gets
+   * one for the reason a key does — every claude.ai connector arrives from
+   * Anthropic's shared addresses, and bucketing it by address would let any
+   * other traffic from there spend its allowance.
+   */
+  function callerBucket(request: FastifyRequest): string {
+    const presented = presentedKey(request);
+    if (presented !== undefined && matches(presented, acceptedKeyDigests)) {
+      return `key:${bucketOf(presented)}`;
+    }
+    if (request.routeOptions.url === MCP_TOKEN_ROUTE) {
+      const { token } = request.params as { token: string };
+      if (matches(token, urlTokenDigests)) return `token:${bucketOf(token)}`;
+    }
+    return `ip:${request.ip}`;
+  }
 
   const app = Fastify({
     logger: {
@@ -257,6 +307,22 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       // which missed every path that did not route through send and discarded
       // the return value. Fastify's own hooks do this correctly.
       redact: ['req.headers.authorization', 'req.headers["x-api-key"]'],
+      serializers: {
+        // Fastify's own request serializer, less the route-versioning header
+        // this app never uses, and with one change: the URL goes through
+        // redactMcpToken first. An MCP URL token travels in the path, and the
+        // stock serializer would write it into the log on every call.
+        req: (request) => ({
+          method: request.method,
+          url: redactMcpToken(request.url),
+          host: request.host,
+          remoteAddress: request.ip,
+          ...(request.socket.remotePort !== undefined
+            ? { remotePort: request.socket.remotePort }
+            : {}),
+        }),
+      },
+      ...(options.logStream !== undefined ? { stream: options.logStream } : {}),
     },
     bodyLimit: env.maxBodyBytes,
     requestIdHeader: 'x-request-id',
@@ -276,16 +342,10 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     max: env.rateLimitPerMinute,
     timeWindow: '1 minute',
     keyGenerator: (request) => {
-      const presented = request.headers['x-api-key'];
       // Per caller where there is a caller to identify, per address otherwise.
-      // Only a *valid* key earns its own bucket: keying on whatever arrived
-      // would let one client mint a fresh allowance per random string and
-      // escape the limit entirely, which is worse than no per-caller limit.
-      if (typeof presented === 'string' && matches(presented, apiKeyDigests)) {
-        // The digest, never the key itself. This value lives in an in-memory
-        // store and appears in the log line written when a caller is limited.
-        const bucket = `key:${digestOf(presented).toString('base64url').slice(0, 16)}`;
-
+      // See callerBucket above for which callers count.
+      const bucket = callerBucket(request);
+      if (bucket.startsWith('key:')) {
         /**
          * One bucket per reader, inside the key.
          *
@@ -310,9 +370,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
         if (typeof reader === 'string' && reader.trim() !== '') {
           return `${bucket}/reader:${reader.trim().slice(0, 64)}`;
         }
-        return bucket;
       }
-      return `ip:${request.ip}`;
+      return bucket;
     },
   });
 
@@ -352,13 +411,16 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   if (authRequired) {
     app.addHook('onRequest', (request, reply, done) => {
       const routeUrl = request.routeOptions.url;
-      if (routeUrl !== undefined && PUBLIC_ROUTES.has(routeUrl)) {
+      if (
+        routeUrl !== undefined &&
+        (PUBLIC_ROUTES.has(routeUrl) || SELF_AUTHENTICATING_ROUTES.has(routeUrl))
+      ) {
         done();
         return;
       }
 
-      const presented = request.headers['x-api-key'];
-      if (typeof presented === 'string' && matches(presented, apiKeyDigests)) {
+      const presented = presentedKey(request);
+      if (presented !== undefined && matches(presented, acceptedKeyDigests)) {
         done();
         return;
       }
@@ -513,6 +575,30 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   registerKeyDateRoutes(app, pool, cache);
   registerReturnRoutes(app, pool, cache);
   registerStoryWindowRoutes(app, pool, cache);
+
+  /**
+   * /v1, run in process on behalf of whoever called /mcp.
+   *
+   * The internal key gets each call past the key hook, and the caller id gives
+   * every MCP caller an allowance of its own under that key — the same
+   * subdivision a frontend's readers get, keyed here on the bucket the outer
+   * request was already counted in.
+   */
+  function engineFor(request: FastifyRequest): EngineCall {
+    const headers = { 'x-api-key': internalKey, 'x-caller-id': `mcp:${callerBucket(request)}` };
+    return async ({ method, url, payload, query }) => {
+      const response = await app.inject({
+        method,
+        url,
+        headers,
+        ...(payload !== undefined ? { payload: payload as object } : {}),
+        ...(query !== undefined ? { query: { ...query } } : {}),
+      });
+      return { status: response.statusCode, body: response.json() };
+    };
+  }
+
+  registerMcpRoutes(app, { urlTokenDigests, engineFor });
 
   initEphemeris();
 

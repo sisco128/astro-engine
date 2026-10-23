@@ -67,6 +67,8 @@ compiler is needed — `sweph` ships prebuilt N-API binaries.
 | `POST` | `/v1/transits/key-dates`     | Key dates for a window, with the funnel as request parameters.     |
 | `POST` | `/v1/transits/story-windows` | The past windows of one story, by signature, strongest first.      |
 | `POST` | `/v1/transits/returns`       | Planetary returns from birth, with life phases.                    |
+| `POST` | `/mcp`                       | The engine as an MCP server, for Claude. See below.                |
+| `POST` | `/mcp/:token`                | The same, for claude.ai connectors, which cannot send a header.    |
 
 Every non-2xx response from every endpoint has the same envelope — branch on
 `error.code`, never on the message:
@@ -107,6 +109,12 @@ Keys are compared as SHA-256 digests through `crypto.timingSafeEqual`, and the
 rate limiter buckets on the presented key rather than the source address when
 that key is a valid one, so the limit is per caller instead of per NAT.
 
+`/mcp/:token` is the one route that takes something other than a key: a token
+from `MCP_URL_TOKENS`, in the path, because that is all a claude.ai connector
+can carry. The two lists are kept apart on purpose — a token does not open
+`/v1` and a key does not work in the path — and tokens are redacted from every
+log line. [Using it from Claude](#using-it-from-claude) has the rest.
+
 ### The contract
 
 `GET /v1/openapi.json` serves an OpenAPI 3.1 document whose request bodies are
@@ -144,6 +152,49 @@ that has to check an orb needs the nine angles before it has asked for a chart,
 and the copy it would otherwise type by hand is the copy that goes wrong — as
 one did, next to a list of error codes in which eight of fourteen named nothing
 this engine has ever returned.
+
+### Using it from Claude
+
+The engine is also a remote [MCP](https://modelcontextprotocol.io) server, so
+Claude can call it directly: on the web, in Claude Desktop, on mobile and in
+Claude Code. Five tools, each a thin wrapper over a `/v1` route run in process,
+so they return exactly what the route returns:
+
+| Tool                | Wraps                             |
+| ------------------- | --------------------------------- |
+| `search_place`      | `GET /v1/geo/search`              |
+| `natal_chart`       | `POST /v1/charts`                 |
+| `key_dates`         | `POST /v1/transits/key-dates`     |
+| `story_windows`     | `POST /v1/transits/story-windows` |
+| `planetary_returns` | `POST /v1/transits/returns`       |
+
+Three things differ from `/v1`, all on the MCP side only:
+
+- **Every ecliptic longitude carries a sign label** next to it
+  (`"zodiac": "19°09′ Leo"`), because that conversion is arithmetic a language
+  model gets wrong, and this engine already owns it. `/v1` is unchanged, and its
+  no-presentation tests still pass.
+- **Answers are kept small enough for one tool result.** Key dates cover at
+  most five years per call, the funnel takes presets only, and story windows
+  stop at twenty.
+- **Every result carries a `license` block** with the source URL. Someone using
+  the engine through Claude interacts with it over a network as much as
+  someone using a frontend does, and AGPL §13 is owed to them too.
+
+**claude.ai, Claude Desktop and mobile.** Set `MCP_URL_TOKENS`, then in
+claude.ai open Settings → Connectors → Add custom connector and enter
+`https://<host>/mcp/<token>`. The connector then appears on every Claude
+surface signed into that account.
+
+**Claude Code.**
+
+```bash
+claude mcp add --transport http astro-engine https://<host>/mcp --header "x-api-key: <key>"
+```
+
+The design and its trade-offs, including why OAuth is deferred and what would
+bring it forward, are in
+[ADR 0006](docs/adr/0006-mcp-connector.md).
 
 ## Ephemeris data
 
@@ -224,7 +275,8 @@ The ones that decide whether results are trustworthy are `SE_EPHE_PATH`,
 before turning any of the last two off. `CORS_ORIGINS` is not optional in
 production: the engine exists to be called from other origins. Neither is
 `API_KEYS`, and that one is enforced rather than advised — see
-[Authentication](#authentication).
+[Authentication](#authentication). `MCP_URL_TOKENS` is optional, and only
+needed to connect claude.ai — see [Using it from Claude](#using-it-from-claude).
 
 `NOMINATIM_BASE_URL` defaults to the public OpenStreetMap geocoder, whose usage
 policy forbids heavy production use and is enforced by blocking the source

@@ -14,7 +14,7 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
-import { EPHEMERIS_PROFILES } from '../../src/config/env.js';
+import { EPHEMERIS_PROFILES, MIN_URL_TOKEN_LENGTH, parseUrlTokens } from '../../src/config/env.js';
 
 describe('EPHEMERIS_PROFILE validation stays in step with the manifest', () => {
   it('accepts every profile the manifest defines', () => {
@@ -27,5 +27,35 @@ describe('EPHEMERIS_PROFILE validation stays in step with the manifest', () => {
     );
 
     expect(missing).toEqual([]);
+  });
+});
+
+describe('MCP_URL_TOKENS validation', () => {
+  const VALID = 'abcdefghijklmnopqrstuvwxyz0123456789_-';
+
+  it('accepts base64url tokens of at least the minimum length', () => {
+    expect(parseUrlTokens([VALID, 'A'.repeat(MIN_URL_TOKEN_LENGTH)])).toEqual([
+      VALID,
+      'A'.repeat(MIN_URL_TOKEN_LENGTH),
+    ]);
+  });
+
+  it('accepts none at all, which leaves the route unmounted', () => {
+    expect(parseUrlTokens([])).toEqual([]);
+  });
+
+  it('refuses to start on a token one character short', () => {
+    expect(() => parseUrlTokens(['A'.repeat(MIN_URL_TOKEN_LENGTH - 1)])).toThrow(/at least 32/);
+  });
+
+  it('refuses a token that would need encoding in a URL', () => {
+    // A `/` would split the path; `+` and `=` are the base64 characters that
+    // base64url exists to avoid.
+    expect(() => parseUrlTokens([`${'A'.repeat(32)}/x`])).toThrow(/MCP_URL_TOKENS/);
+    expect(() => parseUrlTokens([`${'A'.repeat(32)}+=`])).toThrow(/MCP_URL_TOKENS/);
+  });
+
+  it('refuses the whole list when one entry is bad, not just that entry', () => {
+    expect(() => parseUrlTokens([VALID, 'short'])).toThrow(/MCP_URL_TOKENS/);
   });
 });
