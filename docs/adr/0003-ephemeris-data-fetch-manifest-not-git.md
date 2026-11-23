@@ -70,3 +70,18 @@ download and then re-hashing it would have been a tautology, not a verification.
   canonical upstream. Cost with no benefit.
 - **Docker layer only.** Leaves local development with no reproducible path —
   the exact hole `docs/SWISSEPH_INSTALL.md` was written to paper over.
+
+## Addendum, 2026-11-23: the source is pinned to a commit
+
+On 2026-11-21 upstream commit `bab4682` ("compressed ephemeris update")
+rewrote 79 of the 150 files in the manifest, `seas_18.se1` among them. The
+checksums did their job: CI refused the new `seas_18.se1` on the first run
+without a cache, and so would any Docker build of the `full` profile.
+
+`source` now points at `aloistr/swisseph` commit
+`43c9fe54fc1255a6a83dcb5f4364218ab4034e39`, the parent of `bab4682`, instead
+of `master`. All 150 manifest checksums were verified against that commit, so
+the installed data is byte-for-byte what it was before. A branch name is not a
+version: adopting the new files is a deliberate change of the pin and the
+checksums together, with the golden suite run on the new data, never something
+that happens because upstream pushed.

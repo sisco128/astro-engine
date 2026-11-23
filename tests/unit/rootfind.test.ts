@@ -71,7 +71,7 @@ describe('convergence', () => {
 
 describe('bracketing', () => {
   it('refuses a bracket that does not contain a sign change', () => {
-    expect(() => brentRoot((x) => x * x + 1, 0, 1)).toThrowError(BracketError);
+    expect(() => brentRoot((x) => x * x + 1, 0, 1)).toThrow(BracketError);
   });
 
   it('works with the bracket given in either order', () => {

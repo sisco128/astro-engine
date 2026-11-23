@@ -100,6 +100,14 @@ import { useRepoEphemeris } from '../helpers/ephem-path.js';
 
 const EPHE_PATH = useRepoEphemeris();
 
+// Whichever test first asks for a memoised funnel run pays for it, and a run
+// takes eight to twenty seconds of synchronous work. vitest 4 fails a
+// synchronous test that overran its timeout once it returns (vitest 2 did
+// not), so the default 5 s limit no longer fits this file. A module-level
+// vi.setConfig() is not picked up by vitest 4, so every describe block takes
+// the timeout as an option instead.
+const SLOW = { timeout: 120_000 };
+
 beforeAll(() => {
   setEphemerisPath(EPHE_PATH);
   setForbidFallback(true);
@@ -175,7 +183,7 @@ function panel(): Measured[] {
   return REFERENCE_CHARTS.map(measure);
 }
 
-describe('FUNNEL_DEFAULT density on every chart in the panel', () => {
+describe('FUNNEL_DEFAULT density on every chart in the panel', SLOW, () => {
   // A loop rather than it.each, so a failure names the chart and the run that
   // pays for that chart is the test that reports it.
   for (const chart of REFERENCE_CHARTS) {
@@ -215,7 +223,7 @@ describe('FUNNEL_DEFAULT density on every chart in the panel', () => {
   });
 });
 
-describe('the target band, as a statement about ten charts', () => {
+describe('the target band, as a statement about ten charts', SLOW, () => {
   it('holds on nine of the ten, and names the one it does not', () => {
     const outside = REFERENCE_CHARTS.filter((chart) => {
       const { perQuarter } = measure(chart);
@@ -258,7 +266,7 @@ describe('the target band, as a statement about ten charts', () => {
   });
 });
 
-describe('the panel spans the axes its notes claim', () => {
+describe('the panel spans the axes its notes claim', SLOW, () => {
   // Cheap — no funnel, only natal positions. These guard the fixture's own
   // notes: a note claiming a stellium is worthless if someone edits the instant
   // and the stellium goes away.

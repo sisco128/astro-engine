@@ -88,7 +88,7 @@ describe('outside the coverage', () => {
     // Between 13200 BCE (what the filenames imply) and 12999 BCE (what the
     // data holds) the file is present and still cannot answer. This is the
     // case a checksum-only verification would pass and a caller would not.
-    expect(() => bodyState((minJdUt - 30_000) as JulianDayUT, 'sun')).toThrowError(EphemerisError);
+    expect(() => bodyState((minJdUt - 30_000) as JulianDayUT, 'sun')).toThrow(EphemerisError);
   });
 });
 

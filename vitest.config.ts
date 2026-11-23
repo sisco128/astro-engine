@@ -1,8 +1,8 @@
 import { defineConfig } from 'vitest/config';
 
 /**
- * Suites are selected by path rather than by vitest "projects", which need
- * vitest 3. `pnpm test` runs unit + contract; `pnpm test:golden` runs the
+ * Suites are selected by path rather than by vitest "projects".
+ * `pnpm test` runs unit + contract; `pnpm test:golden` runs the
  * suite that touches the real ephemeris files.
  */
 export default defineConfig({
