@@ -124,7 +124,7 @@ describe('spring forward — the time never existed', () => {
         minute: 30,
         zone: 'America/New_York',
       }),
-    ).toThrowError(LocalTimeError);
+    ).toThrow(LocalTimeError);
   });
 
   it('accepts 02:30 on 2 April 1978, which was NOT a transition', () => {

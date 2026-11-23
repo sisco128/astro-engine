@@ -28,6 +28,14 @@ import { useRepoEphemeris } from '../helpers/ephem-path.js';
 
 const EPHE_PATH = useRepoEphemeris();
 
+// Whichever test first asks for a memoised funnel run pays for it, and a run
+// takes eight to twenty seconds of synchronous work. vitest 4 fails a
+// synchronous test that overran its timeout once it returns (vitest 2 did
+// not), so the default 5 s limit no longer fits this file. A module-level
+// vi.setConfig() is not picked up by vitest 4, so every describe block takes
+// the timeout as an option instead.
+const SLOW = { timeout: 120_000 };
+
 let natalPoints: { id: string; lon: number }[];
 let stories: ReturnType<typeof identifyStories>['stories'];
 let from: JulianDayUT;
@@ -70,7 +78,7 @@ function run(config: FunnelConfig): FunnelResult {
   return result;
 }
 
-describe('density against the stated target', () => {
+describe('density against the stated target', SLOW, () => {
   /**
    * Measured over this window with the real implementation: default 2.20,
    * prototype 1.61, strict 1.58.
@@ -127,7 +135,7 @@ describe('density against the stated target', () => {
   });
 });
 
-describe('the funnel is a funnel', () => {
+describe('the funnel is a funnel', SLOW, () => {
   it('nests each level inside the one above', () => {
     const { paths } = run(FUNNEL_DEFAULT);
     expect(paths.length).toBeGreaterThan(0);
@@ -172,7 +180,7 @@ describe('the funnel is a funnel', () => {
   });
 });
 
-describe('windows', () => {
+describe('windows', SLOW, () => {
   it('collapses near-simultaneous paths into one window', () => {
     const { paths, windows } = run(FUNNEL_DEFAULT);
     // Sun, Mercury and Venus travel together, so several can contact the same
@@ -209,7 +217,7 @@ describe('windows', () => {
   });
 });
 
-describe('a path carries its whole chain', () => {
+describe('a path carries its whole chain', SLOW, () => {
   it('returns the route, not just the leaf', () => {
     // The interpretation belongs to the path: a Jupiter resonance means one
     // thing inside a Neptune window and another inside a Pluto window. A

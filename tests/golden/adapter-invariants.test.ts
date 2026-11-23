@@ -49,7 +49,7 @@ describe('I1 — failure is a negative flag, not a non-empty error string', () =
     // Chiron is restricted to JD 1967601.5 .. 3419437.5; below that the
     // library returns flag -1. Bypass the allowlist check by using a date the
     // catalogue also rejects, and assert the code either way.
-    expect(() => bodyState(JD_3000_BCE, 'chiron')).toThrowError(EphemerisError);
+    expect(() => bodyState(JD_3000_BCE, 'chiron')).toThrow(EphemerisError);
     try {
       bodyState(JD_3000_BCE, 'chiron');
       expect.unreachable('should have thrown');
@@ -126,7 +126,7 @@ describe('I2 — the silent Moshier fallback is refused', () => {
       if ((fallbackFlag & 2) === 0) {
         throw new EphemerisError('EPHEMERIS_FALLBACK', 'fell back to Moshier');
       }
-    }).toThrowError(EphemerisError);
+    }).toThrow(EphemerisError);
   });
 
   it('the fallback it refuses is NOT detectable from the numbers alone', () => {
@@ -157,7 +157,7 @@ describe('I3 — unknown bodies and un-normalised longitudes are unrepresentable
     // error, and longitude 251.455 — confident nonsense. The allowlist is the
     // only thing standing between a typo and a plausible wrong answer.
     // @ts-expect-error deliberately outside BodyId
-    expect(() => bodyState(JD_J2000, 'definitelyNotAPlanet')).toThrowError(EphemerisError);
+    expect(() => bodyState(JD_J2000, 'definitelyNotAPlanet')).toThrow(EphemerisError);
   });
 });
 

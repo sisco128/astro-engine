@@ -61,13 +61,12 @@ expect.extend({
   },
 });
 
-// vitest 2 augments `Assertion` / `AsymmetricMatchersContaining`; the
-// `Matchers` interface only exists from vitest 3 onwards.
+// Augmenting `Matchers` types the matcher on `expect()`, `expect.*` and
+// `expect.extend` at once (vitest 3+).
 declare module 'vitest' {
-  interface Assertion {
-    toBeWithinArcsec: (expected: number, arcsec: number) => void;
-  }
-  interface AsymmetricMatchersContaining {
+  // The type parameter must match vitest's own declaration to merge with it.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
+  interface Matchers<T = any> {
     toBeWithinArcsec: (expected: number, arcsec: number) => void;
   }
 }

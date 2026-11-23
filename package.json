@@ -26,18 +26,18 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@fastify/cors": "^11.3.0",
-    "@fastify/helmet": "^13.1.0",
-    "@fastify/rate-limit": "^11.2.0",
-    "@fastify/under-pressure": "^9.1.0",
-    "@modelcontextprotocol/sdk": "1.32.1",
+    "@fastify/cors": "^11.4.3",
+    "@fastify/helmet": "^13.2.0",
+    "@fastify/rate-limit": "^11.3.0",
+    "@fastify/under-pressure": "^9.2.2",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "close-with-grace": "^2.5.0",
-    "fastify": "^5.11.3",
+    "fastify": "^5.12.8",
     "geo-tz": "^8.1.8",
     "lru-cache": "^11.5.2",
     "sweph": "2.10.3-7",
     "temporal-polyfill": "^1.0.3",
-    "zod": "^4.4.3"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -49,6 +49,6 @@
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.66.0",
-    "vitest": "^2.1.0"
+    "vitest": "^4.1.12"
   }
 }

@@ -139,7 +139,7 @@ describe('quadrant systems above the polar circle', () => {
   });
 
   it('refuses Koch for the same reason', () => {
-    expect(() => housesFor(JD_1975, ARCTIC_LAT, 12.4964, 'K')).toThrowError(EphemerisError);
+    expect(() => housesFor(JD_1975, ARCTIC_LAT, 12.4964, 'K')).toThrow(EphemerisError);
   });
 
   it('names alternatives that actually work at that latitude', () => {
